@@ -2,16 +2,26 @@
 
 import { Search, Bell, Settings, Moon, LogOut, UserPlus, LogIn, User } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { LoginModal } from "./auth/LoginModal";
 import { RegisterModal } from "./auth/RegisterModal";
 
 export function Header() {
   const { user, isAuthenticated, logout } = useAuth();
+  const pathname = usePathname();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get page title based on pathname
+  const getPageTitle = () => {
+    if (pathname === '/') return 'Dashboard';
+    if (pathname === '/budget') return 'Budget';
+    if (pathname === '/settings') return 'Settings';
+    return 'Dashboard';
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -65,7 +75,7 @@ export function Header() {
       <header className="fixed top-0 left-16 right-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 z-40">
         {/* Title */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{getPageTitle()}</h1>
           <p className="text-sm text-gray-500">
             {isAuthenticated ? `Welcome ${user?.full_name}` : 'Welcome to PocketFlow Finance Management'}
           </p>

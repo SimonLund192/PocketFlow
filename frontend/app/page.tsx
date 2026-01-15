@@ -111,6 +111,11 @@ export default function DashboardPage() {
 
   const { lifetimeStats, balanceTrends, expenseBreakdown } = data;
 
+  // Calculate KPIs
+  const totalExpenses = lifetimeStats.total_shared_expenses + lifetimeStats.total_personal_expenses;
+  const netIncome = lifetimeStats.total_income - totalExpenses;
+  const totalSavings = lifetimeStats.total_shared_savings;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -119,41 +124,27 @@ export default function DashboardPage() {
         <span className="text-gray-900 font-medium">Dashboard</span>
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      <div className="grid grid-cols-3 gap-6">
         <StatCard
-          title="Total Income (Lifetime)"
-          value={formatCurrency(lifetimeStats.total_income)}
+          title="Net Income (Lifetime)"
+          value={formatCurrency(netIncome)}
+          change=""
+          changePercent=""
+          isPositive={netIncome >= 0}
+        />
+        <StatCard
+          title="Savings (Lifetime)"
+          value={formatCurrency(totalSavings)}
           change=""
           changePercent=""
           isPositive={true}
         />
         <StatCard
-          title="Shared Expenses"
-          value={formatCurrency(lifetimeStats.total_shared_expenses)}
+          title="Expenses (Lifetime)"
+          value={formatCurrency(totalExpenses)}
           change=""
           changePercent=""
           isPositive={false}
-        />
-        <StatCard
-          title="Personal Expenses"
-          value={formatCurrency(lifetimeStats.total_personal_expenses)}
-          change=""
-          changePercent=""
-          isPositive={false}
-        />
-        <StatCard
-          title="Remaining"
-          value={formatCurrency(lifetimeStats.remaining)}
-          change=""
-          changePercent=""
-          isPositive={lifetimeStats.remaining >= 0}
-        />
-        <StatCard
-          title="Shared Savings"
-          value={formatCurrency(lifetimeStats.total_shared_savings)}
-          change=""
-          changePercent=""
-          isPositive={true}
         />
       </div>
 

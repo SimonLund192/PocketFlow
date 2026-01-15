@@ -29,12 +29,16 @@ interface MonthData {
 }
 
 export default function BudgetPage() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const [activeTab, setActiveTab] = useState("income");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Get user display names
+  const user1Name = user?.full_name || "User 1";
+  const user2Name = "Aya Laurvigen";
   
   // Generate list of months (current month + 11 future months)
   const generateMonths = () => {
@@ -59,21 +63,21 @@ export default function BudgetPage() {
   }, []);
   
   // Income items - two columns for users
-  const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: user1Name }]);
   const [incomeUser2, setIncomeUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
   
   // Shared Expenses - single column
   const [sharedExpenses, setSharedExpenses] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "" }]);
   
   // Personal Expenses - two columns for users
-  const [personalUser1, setPersonalUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [personalUser1, setPersonalUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: user1Name }]);
   const [personalUser2, setPersonalUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
   
   // Shared Savings - single column
   const [sharedSavings, setSharedSavings] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "" }]);
   
   // Personal Savings - two columns for users
-  const [personalSavingsUser1, setPersonalSavingsUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [personalSavingsUser1, setPersonalSavingsUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: user1Name }]);
   const [personalSavingsUser2, setPersonalSavingsUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
 
   // Categories loaded from database
@@ -352,7 +356,7 @@ export default function BudgetPage() {
           <TabsContent value="income" className="space-y-4">
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <h3 className="text-sm font-medium mb-3">User 1</h3>
+                <h3 className="text-sm font-medium mb-3">{user1Name}</h3>
                 <div className="space-y-2">
                   {incomeUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -402,7 +406,7 @@ export default function BudgetPage() {
                   ))}
                   <Button
                     variant="outline"
-                    onClick={() => addItem(setIncomeUser1, "User 1")}
+                    onClick={() => addItem(setIncomeUser1, user1Name)}
                     className="w-full"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -411,7 +415,7 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">User 2</h3>
+                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
                 <div className="space-y-2">
                   {incomeUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -536,7 +540,7 @@ export default function BudgetPage() {
           <TabsContent value="personal-expenses" className="space-y-4">
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <h3 className="text-sm font-medium mb-3">User 1</h3>
+                <h3 className="text-sm font-medium mb-3">{user1Name}</h3>
                 <div className="space-y-2">
                   {personalUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -586,7 +590,7 @@ export default function BudgetPage() {
                   ))}
                   <Button
                     variant="outline"
-                    onClick={() => addItem(setPersonalUser1, "User 1")}
+                    onClick={() => addItem(setPersonalUser1, user1Name)}
                     className="w-full"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -595,7 +599,7 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">User 2</h3>
+                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
                 <div className="space-y-2">
                   {personalUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -720,7 +724,7 @@ export default function BudgetPage() {
           <TabsContent value="personal" className="space-y-4">
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <h3 className="text-sm font-medium mb-3">User 1</h3>
+                <h3 className="text-sm font-medium mb-3">{user1Name}</h3>
                 <div className="space-y-2">
                   {personalSavingsUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -770,7 +774,7 @@ export default function BudgetPage() {
                   ))}
                   <Button
                     variant="outline"
-                    onClick={() => addItem(setPersonalSavingsUser1, "User 1")}
+                    onClick={() => addItem(setPersonalSavingsUser1, user1Name)}
                     className="w-full"
                   >
                     <Plus className="h-4 w-4 mr-2" />
@@ -779,7 +783,7 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">User 2</h3>
+                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
                 <div className="space-y-2">
                   {personalSavingsUser2.map(item => (
                     <div key={item.id} className="flex gap-2">

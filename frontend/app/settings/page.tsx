@@ -450,7 +450,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Account</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
         <p className="text-gray-500">Welcome {user?.full_name || 'to PocketFlow Finance Management'}</p>
       </div>
 
@@ -459,7 +459,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span>Home</span>
           <span>›</span>
-          <span className="text-gray-900 font-medium">Account</span>
+          <span className="text-gray-900 font-medium">Settings</span>
         </div>
       </div>
 
@@ -665,6 +665,21 @@ export default function SettingsPage() {
                     <option value="🍔">🍔 Food</option>
                     <option value="🚗">🚗 Car</option>
                     <option value="🏠">🏠 Home</option>
+                    <option value="⚡">⚡ Utilities</option>
+                    <option value="📱">📱 Mobile</option>
+                    <option value="📺">📺 Streaming</option>
+                    <option value="🛡️">🛡️ Insurance</option>
+                    <option value="🏥">🏥 Healthcare</option>
+                    <option value="✈️">✈️ Travel</option>
+                    <option value="🎓">🎓 Education</option>
+                    <option value="🎮">🎮 Entertainment</option>
+                    <option value="🛒">🛒 Shopping</option>
+                    <option value="💳">💳 Subscription</option>
+                    <option value="🔧">🔧 Maintenance</option>
+                    <option value="☕">☕ Coffee</option>
+                    <option value="🏋️">🏋️ Fitness</option>
+                    <option value="💅">💅 Beauty</option>
+                    <option value="🐴">🐴 Horse</option>
                   </select>
                 </div>
 
