@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Card } from "@/components/ui/card";
@@ -30,6 +31,7 @@ interface MonthData {
 
 export default function BudgetPage() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("income");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -38,7 +40,39 @@ export default function BudgetPage() {
   
   // Get user display names
   const user1Name = user?.full_name || "User 1";
-  const user2Name = "Aya Laurvigen";
+  const [user2Name, setUser2Name] = useState("User 2");
+
+  // Handle clicking on User 2 name - navigate to settings
+  const handleUser2NameClick = () => {
+    router.push('/settings?tab=account');
+    // Scroll to the input after navigation
+    setTimeout(() => {
+      const nameInput = document.querySelector('input[placeholder*="Partner"]') as HTMLInputElement;
+      if (nameInput) {
+        nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        nameInput.focus();
+      }
+    }, 300);
+  };
+  
+  // Load user 2 name from localStorage
+  useEffect(() => {
+    const savedUser2Name = localStorage.getItem("user2_name");
+    if (savedUser2Name) {
+      setUser2Name(savedUser2Name);
+    }
+
+    // Listen for changes from settings page
+    const handleUser2NameChange = (event: CustomEvent) => {
+      setUser2Name(event.detail);
+    };
+
+    window.addEventListener('user2NameChanged', handleUser2NameChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('user2NameChanged', handleUser2NameChange as EventListener);
+    };
+  }, []);
   
   // Generate list of months (current month + 11 future months)
   const generateMonths = () => {
@@ -415,7 +449,16 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
+                <h3 
+                  className="text-sm font-medium mb-3 cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                  onClick={handleUser2NameClick}
+                  title="Click to change name"
+                >
+                  {user2Name}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </h3>
                 <div className="space-y-2">
                   {incomeUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -599,7 +642,16 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
+                <h3 
+                  className="text-sm font-medium mb-3 cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                  onClick={handleUser2NameClick}
+                  title="Click to change name"
+                >
+                  {user2Name}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </h3>
                 <div className="space-y-2">
                   {personalUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
@@ -783,7 +835,16 @@ export default function BudgetPage() {
                 </div>
               </div>
               <div>
-                <h3 className="text-sm font-medium mb-3">{user2Name}</h3>
+                <h3 
+                  className="text-sm font-medium mb-3 cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-1"
+                  onClick={handleUser2NameClick}
+                  title="Click to change name"
+                >
+                  {user2Name}
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </h3>
                 <div className="space-y-2">
                   {personalSavingsUser2.map(item => (
                     <div key={item.id} className="flex gap-2">

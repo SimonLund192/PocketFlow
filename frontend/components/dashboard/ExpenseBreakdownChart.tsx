@@ -82,7 +82,7 @@ export function ExpenseBreakdownChart({ data }: ExpenseBreakdownChartProps) {
                     </div>
                     <div className="flex items-center gap-8">
                       <span className="text-base font-medium text-gray-500">
-                        ${item.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        {item.amount.toLocaleString('da-DK', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} kr
                       </span>
                       <span className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent w-20 text-right">
                         {item.percentage.toFixed(0)}%

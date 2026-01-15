@@ -89,6 +89,10 @@ export default function SettingsPage() {
   const [personalPostCode, setPersonalPostCode] = useState("25481");
   const [personalCountry, setPersonalCountry] = useState("Select");
 
+  // User 2 Name customization
+  const [user2Name, setUser2Name] = useState("User 2");
+  const [user2NameSaveStatus, setUser2NameSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
   // Load user data when authenticated
   useEffect(() => {
     if (user) {
@@ -111,6 +115,28 @@ export default function SettingsPage() {
       });
     }
   }, [user]);
+
+  // Load User 2 name from localStorage
+  useEffect(() => {
+    const savedName = localStorage.getItem("user2_name");
+    if (savedName) {
+      setUser2Name(savedName);
+    }
+  }, []);
+
+  // Save User 2 name
+  const handleSaveUser2Name = () => {
+    setUser2NameSaveStatus('saving');
+    localStorage.setItem("user2_name", user2Name);
+    
+    // Dispatch custom event to notify other pages
+    window.dispatchEvent(new CustomEvent('user2NameChanged', { detail: user2Name }));
+    
+    setTimeout(() => {
+      setUser2NameSaveStatus('saved');
+      setTimeout(() => setUser2NameSaveStatus('idle'), 2000);
+    }, 300);
+  };
 
   // Categories
   const [categoryName, setCategoryName] = useState("");
@@ -1308,6 +1334,39 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* User 2 Name Customization */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold">Partner/User 2 Name</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-500 mb-4">
+                  Customize the name displayed for the second user/partner in budget management.
+                </p>
+                <div className="flex gap-3">
+                  <input
+                    type="text"
+                    value={user2Name}
+                    onChange={(e) => setUser2Name(e.target.value)}
+                    placeholder="Enter name (e.g., Partner, Roommate, User 2)"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <Button 
+                    onClick={handleSaveUser2Name}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={user2NameSaveStatus === 'saving'}
+                  >
+                    {user2NameSaveStatus === 'saving' ? 'Saving...' : user2NameSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                  </Button>
+                </div>
+                {user2NameSaveStatus === 'saved' && (
+                  <p className="text-sm text-green-600 mt-2">✓ Name saved successfully! Changes will appear in the Budget page.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-2 gap-6">
             {/* Verify & Upgrade */}
