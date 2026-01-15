@@ -38,7 +38,8 @@ export interface DashboardStats {
 
 export interface BalanceTrend {
   date: string;
-  balance: number;
+  shared_savings: number;
+  personal_savings: number;
 }
 
 export interface SavingsTrend {

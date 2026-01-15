@@ -194,7 +194,7 @@ async def get_dashboard_stats():
 
 @router.get("/dashboard/balance-trends")
 async def get_balance_trends(current_user: UserResponse = Depends(get_current_user)):
-    """Get cumulative shared savings trends over time"""
+    """Get cumulative shared and personal savings trends over time"""
     db = get_database()
     
     # Get all budgets for the user, sorted by month
@@ -206,7 +206,8 @@ async def get_balance_trends(current_user: UserResponse = Depends(get_current_us
         return []
     
     balance_trends = []
-    cumulative_savings = 0.0
+    cumulative_shared = 0.0
+    cumulative_personal = 0.0
     
     for budget in budgets:
         # Calculate shared savings for this month
@@ -214,8 +215,16 @@ async def get_balance_trends(current_user: UserResponse = Depends(get_current_us
         for item in budget.get("shared_savings", []):
             month_shared += item.get("value", 0.0)
         
-        # Add to cumulative total
-        cumulative_savings += month_shared
+        # Calculate personal savings for this month (both users)
+        month_personal = 0.0
+        for item in budget.get("personal_savings_user1", []):
+            month_personal += item.get("value", 0.0)
+        for item in budget.get("personal_savings_user2", []):
+            month_personal += item.get("value", 0.0)
+        
+        # Add to cumulative totals
+        cumulative_shared += month_shared
+        cumulative_personal += month_personal
         
         # Format date as YYYY-MM-01 for the first of the month
         month_str = budget.get("month", "")
@@ -226,9 +235,11 @@ async def get_balance_trends(current_user: UserResponse = Depends(get_current_us
         
         balance_trends.append({
             "date": date_str,
-            "balance": cumulative_savings
+            "shared_savings": cumulative_shared,
+            "personal_savings": cumulative_personal
         })
     
+    print(f"DEBUG: Returning balance_trends: {balance_trends}")
     return balance_trends
 
 @router.get("/dashboard/savings-trends", response_model=List[SavingsTrend])

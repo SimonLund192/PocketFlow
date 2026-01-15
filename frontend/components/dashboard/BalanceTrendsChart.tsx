@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { BalanceTrend } from "@/lib/api";
 
 interface BalanceTrendsChartProps {
@@ -14,21 +14,27 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
   // Format data for the chart - show month/year for better readability
   const chartData = data.map(item => ({
     date: new Date(item.date).toLocaleDateString('da-DK', { month: 'short', year: 'numeric' }),
-    balance: item.balance,
+    "Shared Savings": item.shared_savings,
+    "Personal Savings": item.personal_savings,
   }));
 
   console.log("BalanceTrendsChart chartData:", chartData);
 
-  // Calculate percentage change from start to end
-  const lastBalance = data.length > 0 ? data[data.length - 1].balance : 0;
-  const firstBalance = data.length > 0 ? data[0].balance : 0;
-  const percentChange = firstBalance !== 0 
-    ? (((lastBalance - firstBalance) / Math.abs(firstBalance)) * 100).toFixed(2)
+  // Calculate percentage change from start to end for shared savings
+  const lastSharedSavings = data.length > 0 ? (data[data.length - 1]?.shared_savings ?? 0) : 0;
+  const firstSharedSavings = data.length > 0 ? (data[0]?.shared_savings ?? 0) : 0;
+  const lastPersonalSavings = data.length > 0 ? (data[data.length - 1]?.personal_savings ?? 0) : 0;
+  
+  const percentChange = firstSharedSavings !== 0 
+    ? (((lastSharedSavings - firstSharedSavings) / Math.abs(firstSharedSavings)) * 100).toFixed(2)
     : '0.00';
   
   const isPositive = parseFloat(percentChange) >= 0;
 
-  console.log("Last balance:", lastBalance, "First balance:", firstBalance, "Percent change:", percentChange);
+  console.log("Last shared savings:", lastSharedSavings, "First shared savings:", firstSharedSavings, "Percent change:", percentChange);
+
+  // Calculate total savings (shared + personal)
+  const totalSavings = lastSharedSavings + lastPersonalSavings;
 
   return (
     <Card className="col-span-2">
@@ -37,7 +43,12 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
           <div>
             <CardTitle className="text-lg font-semibold">Lifetime Savings</CardTitle>
             <p className="text-3xl font-bold text-gray-900 mt-2">
-              {lastBalance.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+              {totalSavings.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              Shared: {lastSharedSavings.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+              {" • "}
+              Personal: {lastPersonalSavings.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
             </p>
           </div>
           <div className="text-right">
@@ -52,9 +63,13 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>
             <defs>
-              <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="colorShared" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#6B7FFF" stopOpacity={0.3}/>
                 <stop offset="95%" stopColor="#6B7FFF" stopOpacity={0}/>
+              </linearGradient>
+              <linearGradient id="colorPersonal" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -71,10 +86,10 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
               tickFormatter={(value) => `${value.toLocaleString('da-DK')} kr`}
             />
             <Tooltip 
-              formatter={(value: number | string | undefined) => {
-                if (!value) return ['0 kr', 'Savings'];
+              formatter={(value: number | string | undefined, name: string | undefined) => {
+                if (!value) return ['0 kr', name || 'Savings'];
                 const numValue = typeof value === 'number' ? value : parseFloat(value as string);
-                return [`${numValue.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, 'Savings'];
+                return [`${numValue.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`, name || 'Savings'];
               }}
               contentStyle={{
                 backgroundColor: 'white',
@@ -82,12 +97,24 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
                 borderRadius: '8px',
               }}
             />
+            <Legend 
+              verticalAlign="top" 
+              height={36}
+              iconType="line"
+            />
             <Area 
               type="monotone" 
-              dataKey="balance" 
+              dataKey="Shared Savings" 
               stroke="#6B7FFF" 
               strokeWidth={2}
-              fill="url(#colorBalance)" 
+              fill="url(#colorShared)" 
+            />
+            <Area 
+              type="monotone" 
+              dataKey="Personal Savings" 
+              stroke="#10B981" 
+              strokeWidth={2}
+              fill="url(#colorPersonal)" 
             />
           </AreaChart>
         </ResponsiveContainer>
