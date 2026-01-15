@@ -213,11 +213,6 @@ export default function DashboardPage() {
         <ExpenseBreakdownChart data={expenseBreakdown} />
       </div>
 
-      {/* Savings Trends - Full Width */}
-      <div className="w-full">
-        <SavingsTrendsChart data={savingsTrends} />
-      </div>
-
       {/* Footer */}
       <footer className="flex items-center justify-between pt-8 border-t border-gray-200 text-sm text-gray-500">
         <p>© Copyright 2026 PocketFlow | All Rights Reserved</p>
