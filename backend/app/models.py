@@ -60,12 +60,12 @@ class TransactionCreate(BaseModel):
     date: Optional[datetime] = None
 
 class DashboardStats(BaseModel):
-    total_balance: float
-    total_period_change: float
+    net_income: float
+    total_savings: float
+    total_expenses: float
+    goals_achieved: int
     period_change_percentage: float
-    total_period_expenses: float
-    total_period_income: float
-    last_month_balance: float
+    last_month_net_income: float
 
 class BalanceTrend(BaseModel):
     date: str

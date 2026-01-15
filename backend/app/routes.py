@@ -55,12 +55,6 @@ async def get_dashboard_stats():
     async for transaction in db.transactions.find():
         all_transactions.append(transaction)
     
-    # Calculate total balance (all time)
-    total_balance = sum(
-        t["amount"] if t["type"] == "income" else -t["amount"]
-        for t in all_transactions
-    )
-    
     # Get this month's transactions
     this_month_transactions = [
         t for t in all_transactions 
@@ -73,37 +67,63 @@ async def get_dashboard_stats():
         if t["type"] == "income"
     )
     
-    period_expenses = sum(
+    # Calculate expenses by category
+    shared_expenses = sum(
         t["amount"] for t in this_month_transactions 
+        if t["type"] == "expense" and t["category"] in ["Rent", "Utilities", "Groceries", "Household"]
+    )
+    
+    personal_expenses = sum(
+        t["amount"] for t in this_month_transactions 
+        if t["type"] == "expense" and t["category"] in ["Personal Food", "Transport", "Entertainment", "Shopping", "Healthcare"]
+    )
+    
+    # Calculate savings (only shared savings for now)
+    total_savings = sum(
+        t["amount"] for t in this_month_transactions 
+        if t["type"] == "expense" and t["category"] == "Shared Savings"
+    )
+    
+    # Total expenses (shared + personal + savings)
+    total_expenses = shared_expenses + personal_expenses + total_savings
+    
+    # Net income (income - all expenses)
+    net_income = period_income - total_expenses
+    
+    # Calculate last month's net income for comparison
+    last_month_transactions = [
+        t for t in all_transactions 
+        if start_of_last_month <= t["date"] < start_of_month
+    ]
+    
+    last_month_income = sum(
+        t["amount"] for t in last_month_transactions 
+        if t["type"] == "income"
+    )
+    
+    last_month_expenses = sum(
+        t["amount"] for t in last_month_transactions 
         if t["type"] == "expense"
     )
     
-    period_change = period_income - period_expenses
-    
-    # Calculate last month's balance
-    last_month_transactions = [
-        t for t in all_transactions 
-        if t["date"] < start_of_month
-    ]
-    
-    last_month_balance = sum(
-        t["amount"] if t["type"] == "income" else -t["amount"]
-        for t in last_month_transactions
-    )
+    last_month_net_income = last_month_income - last_month_expenses
     
     # Calculate percentage change
-    if last_month_balance != 0:
-        period_change_percentage = (period_change / abs(last_month_balance)) * 100
+    if last_month_net_income != 0:
+        period_change_percentage = ((net_income - last_month_net_income) / abs(last_month_net_income)) * 100
     else:
-        period_change_percentage = 0 if period_change == 0 else 100
+        period_change_percentage = 0 if net_income == 0 else 100
+    
+    # Goals achieved (placeholder for future feature)
+    goals_achieved = 0
     
     return DashboardStats(
-        total_balance=total_balance,
-        total_period_change=period_change,
+        net_income=net_income,
+        total_savings=total_savings,
+        total_expenses=total_expenses,
+        goals_achieved=goals_achieved,
         period_change_percentage=period_change_percentage,
-        total_period_expenses=period_expenses,
-        total_period_income=period_income,
-        last_month_balance=last_month_balance
+        last_month_net_income=last_month_net_income
     )
 
 @router.get("/dashboard/balance-trends", response_model=List[BalanceTrend])

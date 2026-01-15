@@ -10,12 +10,12 @@ export interface Transaction {
 }
 
 export interface DashboardStats {
-  total_balance: number;
-  total_period_change: number;
+  net_income: number;
+  total_savings: number;
+  total_expenses: number;
+  goals_achieved: number;
   period_change_percentage: number;
-  total_period_expenses: number;
-  total_period_income: number;
-  last_month_balance: number;
+  last_month_net_income: number;
 }
 
 export interface BalanceTrend {

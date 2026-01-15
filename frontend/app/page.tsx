@@ -35,32 +35,32 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-4 gap-6">
         <StatCard
-          title="Total Balance"
-          value={formatCurrency(stats.total_balance)}
-          change={formatCurrency(stats.last_month_balance)}
+          title="NET Income"
+          value={formatCurrency(stats.net_income)}
+          change={formatCurrency(stats.last_month_net_income)}
           changePercent={formatPercentage(stats.period_change_percentage)}
           isPositive={stats.period_change_percentage >= 0}
         />
         <StatCard
-          title="Total Period Change"
-          value={formatCurrency(stats.total_period_change)}
-          change={formatCurrency(stats.last_month_balance)}
+          title="Total Savings"
+          value={formatCurrency(stats.total_savings)}
+          change={formatCurrency(stats.last_month_net_income)}
           changePercent={formatPercentage(stats.period_change_percentage)}
           isPositive={stats.period_change_percentage >= 0}
         />
         <StatCard
-          title="Total Period Expenses"
-          value={formatCurrency(stats.total_period_expenses)}
-          change={formatCurrency(stats.last_month_balance)}
+          title="Total Expenses"
+          value={formatCurrency(stats.total_expenses)}
+          change={formatCurrency(stats.last_month_net_income)}
           changePercent={formatPercentage(stats.period_change_percentage)}
           isPositive={false}
         />
         <StatCard
-          title="Total Period Income"
-          value={formatCurrency(stats.total_period_income)}
-          change={formatCurrency(stats.last_month_balance)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={stats.period_change_percentage >= 0}
+          title="Goals Achieved"
+          value={stats.goals_achieved.toString()}
+          change="Coming soon"
+          changePercent="+0%"
+          isPositive={true}
         />
       </div>
 

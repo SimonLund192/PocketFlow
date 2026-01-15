@@ -1,11 +1,12 @@
 "use client";
 
-import { Home, Wallet, PieChart, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
+import { Home, Wallet, Calculator, PieChart, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
   { icon: Home, label: "Dashboard", href: "/" },
+  { icon: Calculator, label: "Budget", href: "/budget" },
   { icon: Wallet, label: "Transactions", href: "/transactions" },
   { icon: PieChart, label: "Analytics", href: "/analytics" },
   { icon: LinkIcon, label: "Connections", href: "/connections" },
