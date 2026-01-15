@@ -1,5 +1,23 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Helper function to get auth token
+const getAuthToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token');
+};
+
+// Helper function to get auth headers
+const getAuthHeaders = (): HeadersInit => {
+  const token = getAuthToken();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 export interface Transaction {
   _id: string;
   type: 'income' | 'expense';
@@ -56,7 +74,74 @@ export interface BudgetLifetimeStats {
   remaining: number;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  created_at: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterData {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
+export interface AuthToken {
+  access_token: string;
+  token_type: string;
+}
+
 export const api = {
+  // Authentication endpoints
+  async register(data: RegisterData): Promise<User> {
+    const res = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Registration failed' }));
+      throw new Error(errorData.detail || 'Registration failed');
+    }
+    return res.json();
+  },
+
+  async login(credentials: LoginCredentials): Promise<AuthToken> {
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Login failed' }));
+      throw new Error(errorData.detail || 'Login failed');
+    }
+    return res.json();
+  },
+
+  async getCurrentUser(): Promise<User> {
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        // Clear invalid token
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+        }
+      }
+      throw new Error('Failed to get current user');
+    }
+    return res.json();
+  },
+
   async getDashboardStats(): Promise<DashboardStats> {
     const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch dashboard stats');
@@ -82,7 +167,10 @@ export const api = {
   },
 
   async getBudget(month: string): Promise<Budget> {
-    const res = await fetch(`${API_URL}/api/budget/${month}`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/budget/${month}`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error('Failed to fetch budget');
     return res.json();
   },
@@ -90,7 +178,7 @@ export const api = {
   async saveBudget(month: string, budget: Omit<Budget, '_id' | 'month'>): Promise<Budget> {
     const res = await fetch(`${API_URL}/api/budget/${month}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(budget),
     });
     if (!res.ok) {
@@ -102,8 +190,36 @@ export const api = {
   },
 
   async getBudgetLifetimeStats(): Promise<BudgetLifetimeStats> {
-    const res = await fetch(`${API_URL}/api/budget/lifetime/stats`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/budget/lifetime/stats`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error('Failed to fetch lifetime budget stats');
+    return res.json();
+  },
+
+  // Admin endpoints
+  async clearTransactions(): Promise<{ message: string; deleted_count: number }> {
+    const res = await fetch(`${API_URL}/api/admin/clear/transactions`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear transactions');
+    return res.json();
+  },
+
+  async clearBudgets(): Promise<{ message: string; deleted_count: number }> {
+    const res = await fetch(`${API_URL}/api/admin/clear/budgets`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear budgets');
+    return res.json();
+  },
+
+  async clearAllData(): Promise<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }> {
+    const res = await fetch(`${API_URL}/api/admin/clear/all`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear all data');
     return res.json();
   },
 };

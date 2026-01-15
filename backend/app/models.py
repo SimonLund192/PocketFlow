@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -83,6 +83,7 @@ class BudgetItem(BaseModel):
 
 class Budget(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
+    user_id: str  # User who owns this budget
     month: str  # Format: YYYY-MM
     income_user1: List[BudgetItem] = Field(default_factory=list)
     income_user2: List[BudgetItem] = Field(default_factory=list)
@@ -114,3 +115,36 @@ class BudgetLifetimeStats(BaseModel):
     total_personal_expenses: float
     total_shared_savings: float
     remaining: float
+
+# User Models
+class User(BaseModel):
+    id: Optional[str] = Field(None, alias="_id")
+    email: EmailStr
+    full_name: str
+    hashed_password: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        populate_by_name = True
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    created_at: datetime

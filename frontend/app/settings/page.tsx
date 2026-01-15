@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, CreditCard, CheckCircle, XCircle, Edit2, Eye, Trash2 } from "lucide-react";
+import { Mail, Phone, CreditCard, CheckCircle, XCircle, Edit2, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { api } from "@/lib/api";
 
 interface VerificationItem {
   id: string;
@@ -96,6 +97,7 @@ export default function SettingsPage() {
     { id: "currencies", label: "Currencies" },
     { id: "api", label: "Api" },
     { id: "support", label: "Support" },
+    { id: "admin", label: "Admin" },
   ];
 
   const addEmail = () => {
@@ -109,6 +111,39 @@ export default function SettingsPage() {
     if (newPhone.trim()) {
       setPhones([...phones, { id: Date.now().toString(), value: newPhone, verified: false }]);
       setNewPhone("");
+    }
+  };
+
+  const handleClearTransactions = async () => {
+    if (confirm("Are you sure you want to clear all transactions? This action cannot be undone!")) {
+      try {
+        const result = await api.clearTransactions();
+        alert(`Success: ${result.message}\nDeleted ${result.deleted_count} transactions`);
+      } catch (error) {
+        alert("Failed to clear transactions: " + error);
+      }
+    }
+  };
+
+  const handleClearBudgets = async () => {
+    if (confirm("Are you sure you want to clear all budgets? This action cannot be undone!")) {
+      try {
+        const result = await api.clearBudgets();
+        alert(`Success: ${result.message}\nDeleted ${result.deleted_count} budgets`);
+      } catch (error) {
+        alert("Failed to clear budgets: " + error);
+      }
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (confirm("⚠️ WARNING: This will delete ALL data (transactions AND budgets)!\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?")) {
+      try {
+        const result = await api.clearAllData();
+        alert(`Success: ${result.message}\n\nTransactions deleted: ${result.transactions_deleted}\nBudgets deleted: ${result.budgets_deleted}\nTotal deleted: ${result.total_deleted}`);
+      } catch (error) {
+        alert("Failed to clear all data: " + error);
+      }
     }
   };
 
@@ -143,6 +178,132 @@ export default function SettingsPage() {
           ))}
         </TabsList>
       </Tabs>
+
+      {/* Admin Content */}
+      {activeTab === "admin" && (
+        <div className="max-w-4xl mx-auto">
+          <Card className="border-red-200">
+            <CardHeader className="bg-red-50">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+                <CardTitle className="text-xl font-bold text-red-900">
+                  Database Administration
+                </CardTitle>
+              </div>
+              <p className="text-sm text-red-700 mt-2">
+                ⚠️ Danger Zone: These actions permanently delete data and cannot be undone!
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              {/* Clear Transactions */}
+              <div className="border border-gray-200 rounded-lg p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Clear All Transactions
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      This will permanently delete all transaction records from the database. 
+                      This includes all income and expense transactions created from the seed data or manually added.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                      <span className="font-medium">Collection:</span>
+                      <code className="px-2 py-1 bg-gray-100 rounded">transactions</code>
+                    </div>
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleClearTransactions}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  Clear Transactions
+                </Button>
+              </div>
+
+              {/* Clear Budgets */}
+              <div className="border border-gray-200 rounded-lg p-6 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      Clear All Budgets
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      This will permanently delete all budget records from the database. 
+                      This includes all monthly budgets with income, expenses, and savings data you've entered.
+                    </p>
+                    <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
+                      <span className="font-medium">Collection:</span>
+                      <code className="px-2 py-1 bg-gray-100 rounded">budgets</code>
+                    </div>
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleClearBudgets}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  Clear Budgets
+                </Button>
+              </div>
+
+              {/* Clear All Data */}
+              <div className="border-2 border-red-300 rounded-lg p-6 space-y-3 bg-red-50/30">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      <h3 className="text-lg font-bold text-red-900">
+                        Clear ALL Data
+                      </h3>
+                    </div>
+                    <p className="text-sm text-red-800 font-medium mb-2">
+                      ⚠️ EXTREME CAUTION: This will delete EVERYTHING from the database!
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      This action will permanently remove:
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 mt-2 space-y-1">
+                      <li>All transaction records</li>
+                      <li>All budget data for all months</li>
+                      <li>All historical data</li>
+                    </ul>
+                    <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                      <span className="font-medium">Collections:</span>
+                      <code className="px-2 py-1 bg-white rounded border border-red-200">transactions</code>
+                      <code className="px-2 py-1 bg-white rounded border border-red-200">budgets</code>
+                    </div>
+                    <p className="text-xs text-red-700 mt-3 font-medium">
+                      💡 Use this when you want to start fresh with your own data
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  onClick={handleClearAllData}
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+                >
+                  <AlertTriangle className="w-4 h-4 mr-2" />
+                  Clear All Data (Dangerous!)
+                </Button>
+              </div>
+
+              {/* Info Box */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-sm">
+                    <p className="font-medium text-blue-900 mb-1">Why use this?</p>
+                    <p className="text-blue-800">
+                      The database currently contains seed data (sample transactions and budgets). 
+                      Use these buttons to clear the sample data before entering your own personal financial information.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Categories Content */}
       {activeTab === "categories" && (
@@ -808,7 +969,7 @@ export default function SettingsPage() {
       )}
 
       {/* Placeholder for other tabs */}
-      {!["account", "profile", "security", "categories"].includes(activeTab) && (
+      {!["account", "profile", "security", "categories", "admin"].includes(activeTab) && (
         <Card>
           <CardContent className="py-12">
             <div className="text-center text-gray-500">

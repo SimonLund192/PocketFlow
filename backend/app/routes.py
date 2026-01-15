@@ -1,14 +1,75 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from datetime import datetime, timedelta
 from app.models import (
     Transaction, TransactionCreate, DashboardStats, BalanceTrend, 
-    ExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats
+    ExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
+    User, UserCreate, UserLogin, Token, UserResponse
 )
 from app.database import get_database
+from app.auth import (
+    get_password_hash, verify_password, create_access_token, get_current_user
+)
 from bson import ObjectId
 
 router = APIRouter()
+
+# Authentication endpoints
+@router.post("/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(user_data: UserCreate):
+    """Register a new user"""
+    db = get_database()
+    
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": user_data.email})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Hash password and create user
+    user_dict = {
+        "email": user_data.email,
+        "full_name": user_data.full_name,
+        "hashed_password": get_password_hash(user_data.password),
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.users.insert_one(user_dict)
+    new_user = await db.users.find_one({"_id": result.inserted_id})
+    
+    return UserResponse(
+        id=str(new_user["_id"]),
+        email=new_user["email"],
+        full_name=new_user["full_name"],
+        created_at=new_user["created_at"]
+    )
+
+@router.post("/auth/login", response_model=Token)
+async def login(user_credentials: UserLogin):
+    """Login user and return JWT token"""
+    db = get_database()
+    
+    # Find user
+    user = await db.users.find_one({"email": user_credentials.email})
+    if not user or not verify_password(user_credentials.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Create access token
+    access_token = create_access_token(data={"sub": user["email"]})
+    
+    return Token(access_token=access_token, token_type="bearer")
+
+@router.get("/auth/me", response_model=UserResponse)
+async def get_me(current_user: UserResponse = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
+
 
 def transaction_helper(transaction) -> dict:
     return {
@@ -223,6 +284,7 @@ async def delete_transaction(transaction_id: str):
 def budget_helper(budget) -> dict:
     return {
         "_id": str(budget["_id"]),
+        "user_id": budget.get("user_id"),
         "month": budget["month"],
         "income_user1": budget.get("income_user1", []),
         "income_user2": budget.get("income_user2", []),
@@ -237,14 +299,15 @@ def budget_helper(budget) -> dict:
     }
 
 @router.get("/budget/{month}", response_model=Budget)
-async def get_budget(month: str):
+async def get_budget(month: str, current_user: UserResponse = Depends(get_current_user)):
     """Get budget for a specific month (format: YYYY-MM)"""
     db = get_database()
     
-    budget = await db.budgets.find_one({"month": month})
+    budget = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     if not budget:
         # Return empty budget structure if not found
         return {
+            "user_id": current_user.id,
             "month": month,
             "income_user1": [],
             "income_user2": [],
@@ -259,25 +322,26 @@ async def get_budget(month: str):
     return budget_helper(budget)
 
 @router.post("/budget/{month}", response_model=Budget)
-async def save_budget(month: str, budget_data: BudgetCreate):
+async def save_budget(month: str, budget_data: BudgetCreate, current_user: UserResponse = Depends(get_current_user)):
     """Save or update budget for a specific month"""
     db = get_database()
     
     budget_dict = budget_data.model_dump()
+    budget_dict["user_id"] = current_user.id
     budget_dict["month"] = month
     budget_dict["updated_at"] = datetime.utcnow()
     
-    # Check if budget exists
-    existing = await db.budgets.find_one({"month": month})
+    # Check if budget exists for this user and month
+    existing = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     
     if existing:
         # Update existing budget
         budget_dict["created_at"] = existing.get("created_at", datetime.utcnow())
         await db.budgets.update_one(
-            {"month": month},
+            {"month": month, "user_id": current_user.id},
             {"$set": budget_dict}
         )
-        result = await db.budgets.find_one({"month": month})
+        result = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     else:
         # Create new budget
         budget_dict["created_at"] = datetime.utcnow()
@@ -287,8 +351,8 @@ async def save_budget(month: str, budget_data: BudgetCreate):
     return budget_helper(result)
 
 @router.get("/budget/lifetime/stats", response_model=BudgetLifetimeStats)
-async def get_lifetime_budget_stats():
-    """Get lifetime budget statistics across all months"""
+async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_current_user)):
+    """Get lifetime budget statistics across all months for the current user"""
     db = get_database()
     
     total_income = 0.0
@@ -296,7 +360,7 @@ async def get_lifetime_budget_stats():
     total_personal_expenses = 0.0
     total_shared_savings = 0.0
     
-    async for budget in db.budgets.find():
+    async for budget in db.budgets.find({"user_id": current_user.id}):
         # Sum income from both users
         for item in budget.get("income_user1", []):
             total_income += item.get("value", 0.0)
@@ -326,3 +390,41 @@ async def get_lifetime_budget_stats():
         total_shared_savings=total_shared_savings,
         remaining=remaining
     )
+
+# Admin endpoints for clearing data
+@router.delete("/admin/clear/transactions")
+async def clear_transactions():
+    """Clear all transactions from the database"""
+    db = get_database()
+    
+    result = await db.transactions.delete_many({})
+    return {
+        "message": "All transactions cleared successfully",
+        "deleted_count": result.deleted_count
+    }
+
+@router.delete("/admin/clear/budgets")
+async def clear_budgets():
+    """Clear all budgets from the database"""
+    db = get_database()
+    
+    result = await db.budgets.delete_many({})
+    return {
+        "message": "All budgets cleared successfully",
+        "deleted_count": result.deleted_count
+    }
+
+@router.delete("/admin/clear/all")
+async def clear_all_data():
+    """Clear all data from the database (transactions and budgets)"""
+    db = get_database()
+    
+    transactions_result = await db.transactions.delete_many({})
+    budgets_result = await db.budgets.delete_many({})
+    
+    return {
+        "message": "All data cleared successfully",
+        "transactions_deleted": transactions_result.deleted_count,
+        "budgets_deleted": budgets_result.deleted_count,
+        "total_deleted": transactions_result.deleted_count + budgets_result.deleted_count
+    }
