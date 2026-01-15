@@ -117,14 +117,16 @@ export default function DashboardPage() {
   const totalSavings = lifetimeStats.total_shared_savings;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
         <span>Home</span>
         <span>/</span>
         <span className="text-gray-900 font-medium">Dashboard</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-3 gap-8">
         <StatCard
           title="Net Income (Lifetime)"
           value={formatCurrency(netIncome)}
@@ -148,11 +150,13 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      {/* Charts */}
+      <div className="grid grid-cols-3 gap-8">
         <BalanceTrendsChart data={balanceTrends} />
         <ExpenseBreakdownChart data={expenseBreakdown} />
       </div>
 
+      {/* Footer */}
       <footer className="flex items-center justify-between pt-8 border-t border-gray-200 text-sm text-gray-500">
         <p>© Copyright 2026 PocketFlow | All Rights Reserved</p>
         <div className="flex items-center gap-4">
