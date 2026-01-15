@@ -19,6 +19,7 @@ export function Header() {
   const getPageTitle = () => {
     if (pathname === '/') return 'Dashboard';
     if (pathname === '/budget') return 'Budget';
+    if (pathname === '/goals') return 'Goals';
     if (pathname === '/settings') return 'Settings';
     return 'Dashboard';
   };

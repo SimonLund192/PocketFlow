@@ -15,6 +15,7 @@ interface DashboardData {
   savingsTrends: any[];
   expenseBreakdown: any[];
   lifetimeStats: any;
+  monthlyStats: any;
 }
 
 export default function DashboardPage() {
@@ -48,6 +49,14 @@ export default function DashboardPage() {
             total_shared_savings: 0,
             remaining: 0,
           },
+          monthlyStats: {
+            current_income: 0,
+            current_expenses: 0,
+            current_savings: 0,
+            previous_income: 0,
+            previous_expenses: 0,
+            previous_savings: 0,
+          },
         });
         setIsLoading(false);
         return;
@@ -55,14 +64,32 @@ export default function DashboardPage() {
 
       try {
         setIsLoading(true);
-        const [stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
+        const [stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats, monthlyStats, goals] = await Promise.all([
           api.getDashboardStats(),
           api.getBalanceTrends(),
           api.getSavingsTrends(),
           api.getBudgetExpenseBreakdown(),
           api.getBudgetLifetimeStats(),
+          api.getMonthlyStats(),
+          api.getGoals(),
         ]);
-        setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats });
+        setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats, monthlyStats });
+        
+        // Calculate goals achieved
+        const goalsAchieved = goals.filter(goal => {
+          const saved = Math.min(lifetimeStats.total_shared_savings, goal.target);
+          const percentage = (saved / goal.target) * 100;
+          return percentage >= 100;
+        }).length;
+        
+        setData({ 
+          stats: { ...stats, goals_achieved: goalsAchieved }, 
+          balanceTrends, 
+          savingsTrends, 
+          expenseBreakdown, 
+          lifetimeStats, 
+          monthlyStats 
+        });
         setError(null);
       } catch (err: any) {
         console.error('Failed to fetch dashboard data:', err);
@@ -113,12 +140,31 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  const { lifetimeStats, balanceTrends, savingsTrends, expenseBreakdown } = data;
+  const { lifetimeStats, balanceTrends, savingsTrends, expenseBreakdown, monthlyStats } = data;
 
   // Calculate KPIs
   const totalExpenses = lifetimeStats.total_shared_expenses + lifetimeStats.total_personal_expenses;
   const netIncome = lifetimeStats.total_income - totalExpenses;
   const totalSavings = lifetimeStats.total_shared_savings;
+
+  // Calculate monthly changes
+  const calculateChange = (current: number, previous: number) => {
+    if (previous === 0) return { amount: 0, percent: 0 };
+    const amount = current - previous;
+    const percent = (amount / Math.abs(previous)) * 100;
+    return { amount, percent };
+  };
+
+  // Net Income change (current - previous for this month)
+  const currentNetIncome = monthlyStats.current_income - monthlyStats.current_expenses;
+  const previousNetIncome = monthlyStats.previous_income - monthlyStats.previous_expenses;
+  const netIncomeChange = calculateChange(currentNetIncome, previousNetIncome);
+
+  // Savings change
+  const savingsChange = calculateChange(monthlyStats.current_savings, monthlyStats.previous_savings);
+
+  // Expenses change (lower is better, so we invert the logic)
+  const expensesChange = calculateChange(monthlyStats.current_expenses, monthlyStats.previous_expenses);
 
   return (
     <div className="space-y-8 pb-8">
@@ -130,27 +176,34 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-3 gap-8">
+      <div className="grid grid-cols-4 gap-8">
         <StatCard
-          title="Net Income (Lifetime)"
-          value={formatCurrency(netIncome)}
-          change=""
-          changePercent=""
-          isPositive={netIncome >= 0}
+          title="Net Income (Monthly)"
+          value={formatCurrency(currentNetIncome)}
+          change={formatCurrency(Math.abs(netIncomeChange.amount))}
+          changePercent={`${netIncomeChange.percent >= 0 ? '+' : ''}${netIncomeChange.percent.toFixed(1)}%`}
+          isPositive={netIncomeChange.amount >= 0}
         />
         <StatCard
-          title="Savings (Lifetime)"
-          value={formatCurrency(totalSavings)}
+          title="Savings (Monthly)"
+          value={formatCurrency(monthlyStats.current_savings)}
+          change={formatCurrency(Math.abs(savingsChange.amount))}
+          changePercent={`${savingsChange.percent >= 0 ? '+' : ''}${savingsChange.percent.toFixed(1)}%`}
+          isPositive={savingsChange.amount >= 0}
+        />
+        <StatCard
+          title="Expenses (Monthly)"
+          value={formatCurrency(monthlyStats.current_expenses)}
+          change={formatCurrency(Math.abs(expensesChange.amount))}
+          changePercent={`${expensesChange.percent >= 0 ? '+' : ''}${expensesChange.percent.toFixed(1)}%`}
+          isPositive={expensesChange.amount <= 0}
+        />
+        <StatCard
+          title="Goals Achieved"
+          value={`${data.stats.goals_achieved}`}
           change=""
           changePercent=""
           isPositive={true}
-        />
-        <StatCard
-          title="Expenses (Lifetime)"
-          value={formatCurrency(totalExpenses)}
-          change=""
-          changePercent=""
-          isPositive={false}
         />
       </div>
 
