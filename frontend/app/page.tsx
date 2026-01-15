@@ -1,74 +1,171 @@
+'use client';
+
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BalanceTrendsChart } from "@/components/dashboard/BalanceTrendsChart";
 import { ExpenseBreakdownChart } from "@/components/dashboard/ExpenseBreakdownChart";
+import { SavingsTrendsChart } from "@/components/dashboard/SavingsTrendsChart";
 import { Facebook, Twitter, Linkedin, Youtube } from "lucide-react";
 
-export default async function DashboardPage() {
-  const [stats, balanceTrends, expenseBreakdown] = await Promise.all([
-    api.getDashboardStats(),
-    api.getBalanceTrends(),
-    api.getExpenseBreakdown(),
-  ]);
+interface DashboardData {
+  stats: any;
+  balanceTrends: any[];
+  savingsTrends: any[];
+  expenseBreakdown: any[];
+  lifetimeStats: any;
+}
+
+export default function DashboardPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (authLoading) return;
+      
+      if (!isAuthenticated) {
+        // Show empty state for non-authenticated users
+        setData({
+          stats: {
+            net_income: 0,
+            total_savings: 0,
+            total_expenses: 0,
+            goals_achieved: 0,
+            period_change_percentage: 0,
+            last_month_net_income: 0,
+          },
+          balanceTrends: [],
+          savingsTrends: [],
+          expenseBreakdown: [],
+          lifetimeStats: {
+            total_income: 0,
+            total_shared_expenses: 0,
+            total_personal_expenses: 0,
+            total_shared_savings: 0,
+            remaining: 0,
+          },
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const [stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
+          api.getDashboardStats(),
+          api.getBalanceTrends(),
+          api.getSavingsTrends(),
+          api.getBudgetExpenseBreakdown(),
+          api.getBudgetLifetimeStats(),
+        ]);
+        setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats });
+        setError(null);
+      } catch (err: any) {
+        console.error('Failed to fetch dashboard data:', err);
+        setError(err.message || 'Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, authLoading]);
 
   const formatCurrency = (num: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('da-DK', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'DKK',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(num);
   };
 
-  const formatPercentage = (num: number) => {
-    const sign = num >= 0 ? '+' : '';
-    return `${sign}${num.toFixed(2)}%`;
-  };
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-gray-500">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-red-500">Error: {error}</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900">Welcome to PocketFlow</h2>
+          <p className="text-gray-500">Please login or create an account to view your dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { lifetimeStats, balanceTrends, savingsTrends, expenseBreakdown } = data;
+
+  // Calculate KPIs
+  const totalExpenses = lifetimeStats.total_shared_expenses + lifetimeStats.total_personal_expenses;
+  const netIncome = lifetimeStats.total_income - totalExpenses;
+  const totalSavings = lifetimeStats.total_shared_savings;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-8">
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-gray-500">
         <span>Home</span>
         <span>/</span>
         <span className="text-gray-900 font-medium">Dashboard</span>
       </div>
 
-      <div className="grid grid-cols-4 gap-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-3 gap-8">
         <StatCard
-          title="NET Income"
-          value={formatCurrency(stats.net_income)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={stats.period_change_percentage >= 0}
+          title="Net Income (Lifetime)"
+          value={formatCurrency(netIncome)}
+          change=""
+          changePercent=""
+          isPositive={netIncome >= 0}
         />
         <StatCard
-          title="Total Savings"
-          value={formatCurrency(stats.total_savings)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={stats.period_change_percentage >= 0}
-        />
-        <StatCard
-          title="Total Expenses"
-          value={formatCurrency(stats.total_expenses)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={false}
-        />
-        <StatCard
-          title="Goals Achieved"
-          value={stats.goals_achieved.toString()}
-          change="Coming soon"
-          changePercent="+0%"
+          title="Savings (Lifetime)"
+          value={formatCurrency(totalSavings)}
+          change=""
+          changePercent=""
           isPositive={true}
+        />
+        <StatCard
+          title="Expenses (Lifetime)"
+          value={formatCurrency(totalExpenses)}
+          change=""
+          changePercent=""
+          isPositive={false}
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      {/* Charts */}
+      <div className="grid grid-cols-3 gap-8">
         <BalanceTrendsChart data={balanceTrends} />
         <ExpenseBreakdownChart data={expenseBreakdown} />
       </div>
 
+      {/* Savings Trends - Full Width */}
+      <div className="w-full">
+        <SavingsTrendsChart data={savingsTrends} />
+      </div>
+
+      {/* Footer */}
       <footer className="flex items-center justify-between pt-8 border-t border-gray-200 text-sm text-gray-500">
         <p>© Copyright 2026 PocketFlow | All Rights Reserved</p>
         <div className="flex items-center gap-4">
