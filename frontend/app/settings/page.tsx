@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Mail, Phone, CreditCard, CheckCircle, XCircle, Edit2, Eye, Trash2, AlertTriangle } from "lucide-react";
 import { api } from "@/lib/api";
 
@@ -25,6 +26,21 @@ interface Category {
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("account");
+  
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type?: 'danger' | 'warning' | 'info' | 'success';
+    confirmText?: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
   
   // Social Security Card
   const [ssnName, setSsnName] = useState("");
@@ -135,36 +151,186 @@ export default function SettingsPage() {
   };
 
   const handleClearTransactions = async () => {
-    if (confirm("Are you sure you want to clear all transactions? This action cannot be undone!")) {
-      try {
-        const result = await api.clearTransactions();
-        alert(`Success: ${result.message}\nDeleted ${result.deleted_count} transactions`);
-      } catch (error) {
-        alert("Failed to clear transactions: " + error);
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Clear All Transactions',
+      message: 'Are you sure you want to clear all transactions?\n\nThis action cannot be undone!',
+      type: 'danger',
+      confirmText: 'Clear Transactions',
+      onConfirm: async () => {
+        try {
+          const result = await api.clearTransactions();
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Success',
+            message: `${result.message}\n\nDeleted ${result.deleted_count} transactions`,
+            type: 'success',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        } catch (error) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Error',
+            message: `Failed to clear transactions: ${error}`,
+            type: 'danger',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        }
+      },
+    });
   };
 
   const handleClearBudgets = async () => {
-    if (confirm("Are you sure you want to clear all budgets? This action cannot be undone!")) {
-      try {
-        const result = await api.clearBudgets();
-        alert(`Success: ${result.message}\nDeleted ${result.deleted_count} budgets`);
-      } catch (error) {
-        alert("Failed to clear budgets: " + error);
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Clear All Budgets',
+      message: 'Are you sure you want to clear all budgets?\n\nThis action cannot be undone!',
+      type: 'danger',
+      confirmText: 'Clear Budgets',
+      onConfirm: async () => {
+        try {
+          const result = await api.clearBudgets();
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Success',
+            message: `${result.message}\n\nDeleted ${result.deleted_count} budgets`,
+            type: 'success',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        } catch (error) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Error',
+            message: `Failed to clear budgets: ${error}`,
+            type: 'danger',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        }
+      },
+    });
   };
 
   const handleClearAllData = async () => {
-    if (confirm("⚠️ WARNING: This will delete ALL data (transactions AND budgets)!\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?")) {
-      try {
-        const result = await api.clearAllData();
-        alert(`Success: ${result.message}\n\nTransactions deleted: ${result.transactions_deleted}\nBudgets deleted: ${result.budgets_deleted}\nTotal deleted: ${result.total_deleted}`);
-      } catch (error) {
-        alert("Failed to clear all data: " + error);
-      }
+    setConfirmDialog({
+      isOpen: true,
+      title: '⚠️ WARNING: Clear All Data',
+      message: 'This will delete ALL data (transactions AND budgets)!\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?',
+      type: 'danger',
+      confirmText: 'Delete Everything',
+      onConfirm: async () => {
+        try {
+          const result = await api.clearAllData();
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Success',
+            message: `${result.message}\n\nTransactions deleted: ${result.transactions_deleted}\nBudgets deleted: ${result.budgets_deleted}\nTotal deleted: ${result.total_deleted}`,
+            type: 'success',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        } catch (error) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Error',
+            message: `Failed to clear all data: ${error}`,
+            type: 'danger',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        }
+      },
+    });
+  };
+
+  // Category Management Functions
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const [editCategoryIcon, setEditCategoryIcon] = useState("");
+  const [editCategoryColor, setEditCategoryColor] = useState("");
+
+  const handleCreateCategory = () => {
+    if (!categoryName.trim() || !categoryType || !categoryIcon || !categoryColor) {
+      alert("Please fill in all fields");
+      return;
     }
+
+    const newCategory: Category = {
+      id: Date.now().toString(),
+      name: categoryName,
+      icon: categoryIcon,
+      color: categoryColor,
+      type: categoryType as 'income' | 'expense',
+    };
+
+    if (categoryType === 'income') {
+      setIncomeCategories([...incomeCategories, newCategory]);
+    } else {
+      setExpenseCategories([...expenseCategories, newCategory]);
+    }
+
+    // Reset form
+    setCategoryName("");
+    setCategoryType("");
+    setCategoryIcon("");
+    setCategoryColor("");
+  };
+
+  const handleDeleteCategory = (categoryId: string, type: 'income' | 'expense') => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Category',
+      message: 'Are you sure you want to delete this category? This action cannot be undone.',
+      type: 'danger',
+      confirmText: 'Delete',
+      onConfirm: () => {
+        if (type === 'income') {
+          setIncomeCategories(incomeCategories.filter(cat => cat.id !== categoryId));
+        } else {
+          setExpenseCategories(expenseCategories.filter(cat => cat.id !== categoryId));
+        }
+      },
+    });
+  };
+
+  const startEditCategory = (category: Category) => {
+    setEditingCategory(category.id);
+    setEditCategoryName(category.name);
+    setEditCategoryIcon(category.icon);
+    setEditCategoryColor(category.color);
+  };
+
+  const handleSaveEditCategory = (categoryId: string, type: 'income' | 'expense') => {
+    if (!editCategoryName.trim() || !editCategoryIcon || !editCategoryColor) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    if (type === 'income') {
+      setIncomeCategories(incomeCategories.map(cat => 
+        cat.id === categoryId 
+          ? { ...cat, name: editCategoryName, icon: editCategoryIcon, color: editCategoryColor }
+          : cat
+      ));
+    } else {
+      setExpenseCategories(expenseCategories.map(cat => 
+        cat.id === categoryId 
+          ? { ...cat, name: editCategoryName, icon: editCategoryIcon, color: editCategoryColor }
+          : cat
+      ));
+    }
+
+    setEditingCategory(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCategory(null);
+    setEditCategoryName("");
+    setEditCategoryIcon("");
+    setEditCategoryColor("");
   };
 
   if (authLoading) {
@@ -429,7 +595,10 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <Button className="w-full bg-green-600 hover:bg-green-700 text-white">
+              <Button 
+                onClick={handleCreateCategory}
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
+              >
                 Create new category
               </Button>
             </CardContent>
@@ -450,26 +619,82 @@ export default function SettingsPage() {
                     key={category.id}
                     className="flex items-center gap-4 py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
                   >
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                      </svg>
-                    </div>
-                    <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white text-lg flex-shrink-0`}>
-                      {category.icon}
-                    </div>
-                    <span className="flex-1 text-gray-700 font-medium">{category.name}</span>
-                    <div className="flex items-center gap-2">
-                      <button className="p-2 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button className="p-2 hover:bg-green-50 rounded-lg transition-colors">
-                        <Eye className="w-4 h-4 text-green-600" />
-                      </button>
-                      <button className="p-2 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
+                    {editingCategory === category.id ? (
+                      <>
+                        {/* Edit Mode */}
+                        <input
+                          type="text"
+                          value={editCategoryIcon}
+                          onChange={(e) => setEditCategoryIcon(e.target.value)}
+                          className="w-12 px-2 py-1 border border-gray-300 rounded text-center"
+                          placeholder="🎁"
+                        />
+                        <input
+                          type="text"
+                          value={editCategoryName}
+                          onChange={(e) => setEditCategoryName(e.target.value)}
+                          className="flex-1 px-3 py-1 border border-gray-300 rounded"
+                          placeholder="Category name"
+                        />
+                        <select
+                          value={editCategoryColor}
+                          onChange={(e) => setEditCategoryColor(e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded"
+                        >
+                          <option value="bg-blue-500">Blue</option>
+                          <option value="bg-red-500">Red</option>
+                          <option value="bg-green-500">Green</option>
+                          <option value="bg-yellow-500">Yellow</option>
+                          <option value="bg-purple-500">Purple</option>
+                          <option value="bg-pink-500">Pink</option>
+                          <option value="bg-orange-500">Orange</option>
+                          <option value="bg-teal-500">Teal</option>
+                          <option value="bg-cyan-500">Cyan</option>
+                          <option value="bg-indigo-500">Indigo</option>
+                        </select>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleSaveEditCategory(category.id, 'income')}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={handleCancelEdit}
+                            className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* View Mode */}
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
+                        </div>
+                        <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white text-lg flex-shrink-0`}>
+                          {category.icon}
+                        </div>
+                        <span className="flex-1 text-gray-700 font-medium">{category.name}</span>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => startEditCategory(category)}
+                            className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(category.id, 'income')}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </CardContent>
@@ -488,26 +713,82 @@ export default function SettingsPage() {
                     key={category.id}
                     className="flex items-center gap-4 py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
                   >
-                    <div className="flex items-center gap-2 text-gray-400">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                      </svg>
-                    </div>
-                    <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white text-lg flex-shrink-0`}>
-                      {category.icon}
-                    </div>
-                    <span className="flex-1 text-gray-700 font-medium">{category.name}</span>
-                    <div className="flex items-center gap-2">
-                      <button className="p-2 hover:bg-blue-50 rounded-lg transition-colors">
-                        <Edit2 className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button className="p-2 hover:bg-green-50 rounded-lg transition-colors">
-                        <Eye className="w-4 h-4 text-green-600" />
-                      </button>
-                      <button className="p-2 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
-                    </div>
+                    {editingCategory === category.id ? (
+                      <>
+                        {/* Edit Mode */}
+                        <input
+                          type="text"
+                          value={editCategoryIcon}
+                          onChange={(e) => setEditCategoryIcon(e.target.value)}
+                          className="w-12 px-2 py-1 border border-gray-300 rounded text-center"
+                          placeholder="🎁"
+                        />
+                        <input
+                          type="text"
+                          value={editCategoryName}
+                          onChange={(e) => setEditCategoryName(e.target.value)}
+                          className="flex-1 px-3 py-1 border border-gray-300 rounded"
+                          placeholder="Category name"
+                        />
+                        <select
+                          value={editCategoryColor}
+                          onChange={(e) => setEditCategoryColor(e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded"
+                        >
+                          <option value="bg-blue-500">Blue</option>
+                          <option value="bg-red-500">Red</option>
+                          <option value="bg-green-500">Green</option>
+                          <option value="bg-yellow-500">Yellow</option>
+                          <option value="bg-purple-500">Purple</option>
+                          <option value="bg-pink-500">Pink</option>
+                          <option value="bg-orange-500">Orange</option>
+                          <option value="bg-teal-500">Teal</option>
+                          <option value="bg-cyan-500">Cyan</option>
+                          <option value="bg-indigo-500">Indigo</option>
+                        </select>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleSaveEditCategory(category.id, 'expense')}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={handleCancelEdit}
+                            className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* View Mode */}
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
+                        </div>
+                        <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white text-lg flex-shrink-0`}>
+                          {category.icon}
+                        </div>
+                        <span className="flex-1 text-gray-700 font-medium">{category.name}</span>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => startEditCategory(category)}
+                            className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(category.id, 'expense')}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </CardContent>
@@ -1051,6 +1332,17 @@ export default function SettingsPage() {
           </a>
         </div>
       </footer>
+      
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.confirmText}
+      />
     </div>
   );
 }
