@@ -75,3 +75,42 @@ class ExpenseBreakdown(BaseModel):
     category: str
     amount: float
     percentage: float
+
+class BudgetItem(BaseModel):
+    id: str
+    value: float
+    user: Optional[str] = None
+
+class Budget(BaseModel):
+    id: Optional[str] = Field(None, alias="_id")
+    month: str  # Format: YYYY-MM
+    income_user1: List[BudgetItem] = Field(default_factory=list)
+    income_user2: List[BudgetItem] = Field(default_factory=list)
+    shared_expenses: List[BudgetItem] = Field(default_factory=list)
+    personal_user1: List[BudgetItem] = Field(default_factory=list)
+    personal_user2: List[BudgetItem] = Field(default_factory=list)
+    shared_savings: List[BudgetItem] = Field(default_factory=list)
+    personal_savings_user1: List[BudgetItem] = Field(default_factory=list)
+    personal_savings_user2: List[BudgetItem] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        populate_by_name = True
+
+class BudgetCreate(BaseModel):
+    income_user1: List[BudgetItem] = Field(default_factory=list)
+    income_user2: List[BudgetItem] = Field(default_factory=list)
+    shared_expenses: List[BudgetItem] = Field(default_factory=list)
+    personal_user1: List[BudgetItem] = Field(default_factory=list)
+    personal_user2: List[BudgetItem] = Field(default_factory=list)
+    shared_savings: List[BudgetItem] = Field(default_factory=list)
+    personal_savings_user1: List[BudgetItem] = Field(default_factory=list)
+    personal_savings_user2: List[BudgetItem] = Field(default_factory=list)
+
+class BudgetLifetimeStats(BaseModel):
+    total_income: float
+    total_shared_expenses: float
+    total_personal_expenses: float
+    total_shared_savings: float
+    remaining: float

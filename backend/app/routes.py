@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import List
 from datetime import datetime, timedelta
-from app.models import Transaction, TransactionCreate, DashboardStats, BalanceTrend, ExpenseBreakdown, TransactionType
+from app.models import (
+    Transaction, TransactionCreate, DashboardStats, BalanceTrend, 
+    ExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats
+)
 from app.database import get_database
 from bson import ObjectId
 
@@ -215,3 +218,111 @@ async def delete_transaction(transaction_id: str):
         return {"message": "Transaction deleted successfully"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# Budget endpoints
+def budget_helper(budget) -> dict:
+    return {
+        "_id": str(budget["_id"]),
+        "month": budget["month"],
+        "income_user1": budget.get("income_user1", []),
+        "income_user2": budget.get("income_user2", []),
+        "shared_expenses": budget.get("shared_expenses", []),
+        "personal_user1": budget.get("personal_user1", []),
+        "personal_user2": budget.get("personal_user2", []),
+        "shared_savings": budget.get("shared_savings", []),
+        "personal_savings_user1": budget.get("personal_savings_user1", []),
+        "personal_savings_user2": budget.get("personal_savings_user2", []),
+        "created_at": budget.get("created_at"),
+        "updated_at": budget.get("updated_at")
+    }
+
+@router.get("/budget/{month}", response_model=Budget)
+async def get_budget(month: str):
+    """Get budget for a specific month (format: YYYY-MM)"""
+    db = get_database()
+    
+    budget = await db.budgets.find_one({"month": month})
+    if not budget:
+        # Return empty budget structure if not found
+        return {
+            "month": month,
+            "income_user1": [],
+            "income_user2": [],
+            "shared_expenses": [],
+            "personal_user1": [],
+            "personal_user2": [],
+            "shared_savings": [],
+            "personal_savings_user1": [],
+            "personal_savings_user2": []
+        }
+    
+    return budget_helper(budget)
+
+@router.post("/budget/{month}", response_model=Budget)
+async def save_budget(month: str, budget_data: BudgetCreate):
+    """Save or update budget for a specific month"""
+    db = get_database()
+    
+    budget_dict = budget_data.model_dump()
+    budget_dict["month"] = month
+    budget_dict["updated_at"] = datetime.utcnow()
+    
+    # Check if budget exists
+    existing = await db.budgets.find_one({"month": month})
+    
+    if existing:
+        # Update existing budget
+        budget_dict["created_at"] = existing.get("created_at", datetime.utcnow())
+        await db.budgets.update_one(
+            {"month": month},
+            {"$set": budget_dict}
+        )
+        result = await db.budgets.find_one({"month": month})
+    else:
+        # Create new budget
+        budget_dict["created_at"] = datetime.utcnow()
+        result = await db.budgets.insert_one(budget_dict)
+        result = await db.budgets.find_one({"_id": result.inserted_id})
+    
+    return budget_helper(result)
+
+@router.get("/budget/lifetime/stats", response_model=BudgetLifetimeStats)
+async def get_lifetime_budget_stats():
+    """Get lifetime budget statistics across all months"""
+    db = get_database()
+    
+    total_income = 0.0
+    total_shared_expenses = 0.0
+    total_personal_expenses = 0.0
+    total_shared_savings = 0.0
+    
+    async for budget in db.budgets.find():
+        # Sum income from both users
+        for item in budget.get("income_user1", []):
+            total_income += item.get("value", 0.0)
+        for item in budget.get("income_user2", []):
+            total_income += item.get("value", 0.0)
+        
+        # Sum shared expenses
+        for item in budget.get("shared_expenses", []):
+            total_shared_expenses += item.get("value", 0.0)
+        
+        # Sum personal expenses from both users
+        for item in budget.get("personal_user1", []):
+            total_personal_expenses += item.get("value", 0.0)
+        for item in budget.get("personal_user2", []):
+            total_personal_expenses += item.get("value", 0.0)
+        
+        # Sum shared savings
+        for item in budget.get("shared_savings", []):
+            total_shared_savings += item.get("value", 0.0)
+    
+    remaining = total_income - total_shared_expenses - total_personal_expenses - total_shared_savings
+    
+    return BudgetLifetimeStats(
+        total_income=total_income,
+        total_shared_expenses=total_shared_expenses,
+        total_personal_expenses=total_personal_expenses,
+        total_shared_savings=total_shared_savings,
+        remaining=remaining
+    )

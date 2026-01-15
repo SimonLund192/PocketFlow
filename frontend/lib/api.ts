@@ -29,6 +29,33 @@ export interface ExpenseBreakdown {
   percentage: number;
 }
 
+export interface BudgetItem {
+  id: string;
+  value: number;
+  user?: string;
+}
+
+export interface Budget {
+  _id?: string;
+  month: string;
+  income_user1: BudgetItem[];
+  income_user2: BudgetItem[];
+  shared_expenses: BudgetItem[];
+  personal_user1: BudgetItem[];
+  personal_user2: BudgetItem[];
+  shared_savings: BudgetItem[];
+  personal_savings_user1: BudgetItem[];
+  personal_savings_user2: BudgetItem[];
+}
+
+export interface BudgetLifetimeStats {
+  total_income: number;
+  total_shared_expenses: number;
+  total_personal_expenses: number;
+  total_shared_savings: number;
+  remaining: number;
+}
+
 export const api = {
   async getDashboardStats(): Promise<DashboardStats> {
     const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store' });
@@ -51,6 +78,32 @@ export const api = {
   async getTransactions(): Promise<Transaction[]> {
     const res = await fetch(`${API_URL}/api/transactions`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch transactions');
+    return res.json();
+  },
+
+  async getBudget(month: string): Promise<Budget> {
+    const res = await fetch(`${API_URL}/api/budget/${month}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch budget');
+    return res.json();
+  },
+
+  async saveBudget(month: string, budget: Omit<Budget, '_id' | 'month'>): Promise<Budget> {
+    const res = await fetch(`${API_URL}/api/budget/${month}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(budget),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      console.error('Save budget error:', errorData);
+      throw new Error(`Failed to save budget: ${JSON.stringify(errorData)}`);
+    }
+    return res.json();
+  },
+
+  async getBudgetLifetimeStats(): Promise<BudgetLifetimeStats> {
+    const res = await fetch(`${API_URL}/api/budget/lifetime/stats`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch lifetime budget stats');
     return res.json();
   },
 };

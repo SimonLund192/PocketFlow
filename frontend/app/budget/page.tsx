@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { api, BudgetItem as ApiBudgetItem } from "@/lib/api";
 
 interface BudgetItem {
   id: string;
@@ -13,8 +14,45 @@ interface BudgetItem {
   user?: string;
 }
 
+interface MonthData {
+  incomeUser1: BudgetItem[];
+  incomeUser2: BudgetItem[];
+  sharedExpenses: BudgetItem[];
+  personalUser1: BudgetItem[];
+  personalUser2: BudgetItem[];
+  sharedSavings: BudgetItem[];
+  personalSavingsUser1: BudgetItem[];
+  personalSavingsUser2: BudgetItem[];
+}
+
 export default function BudgetPage() {
   const [activeTab, setActiveTab] = useState("income");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Generate list of months (current month + 11 future months)
+  const generateMonths = () => {
+    const months = [];
+    const currentDate = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = date.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
+      months.push({ key: monthKey, label: monthLabel });
+    }
+    return months;
+  };
+
+  const months = generateMonths();
+
+  // Initialize with current month
+  useEffect(() => {
+    if (!selectedMonth && months.length > 0) {
+      setSelectedMonth(months[0].key);
+    }
+  }, []);
   
   // Income items - two columns for users
   const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 1" }]);
@@ -34,6 +72,91 @@ export default function BudgetPage() {
   const [personalSavingsUser1, setPersonalSavingsUser1] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 1" }]);
   const [personalSavingsUser2, setPersonalSavingsUser2] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 2" }]);
 
+  // Load budget data from API when month changes
+  useEffect(() => {
+    if (selectedMonth) {
+      loadBudgetData(selectedMonth);
+    }
+  }, [selectedMonth]);
+
+  const loadBudgetData = async (month: string) => {
+    setIsLoading(true);
+    try {
+      const budget = await api.getBudget(month);
+      
+      // Convert API BudgetItem[] to local BudgetItem[] format
+      const convertItems = (items: ApiBudgetItem[]): BudgetItem[] => {
+        if (!items || items.length === 0) {
+          return [{ id: "1", value: "", user: undefined }];
+        }
+        return items.map(item => ({
+          id: item.id,
+          value: item.value.toString(),
+          user: item.user
+        }));
+      };
+
+      setIncomeUser1(convertItems(budget.income_user1));
+      setIncomeUser2(convertItems(budget.income_user2));
+      setSharedExpenses(convertItems(budget.shared_expenses));
+      setPersonalUser1(convertItems(budget.personal_user1));
+      setPersonalUser2(convertItems(budget.personal_user2));
+      setSharedSavings(convertItems(budget.shared_savings));
+      setPersonalSavingsUser1(convertItems(budget.personal_savings_user1));
+      setPersonalSavingsUser2(convertItems(budget.personal_savings_user2));
+    } catch (error) {
+      console.error('Failed to load budget:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Save budget data to API with debounce
+  useEffect(() => {
+    if (!selectedMonth) return;
+    
+    const timeoutId = setTimeout(() => {
+      saveBudgetData();
+    }, 1000); // Debounce for 1 second
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedMonth, incomeUser1, incomeUser2, sharedExpenses, personalUser1, personalUser2, sharedSavings, personalSavingsUser1, personalSavingsUser2]);
+
+  const saveBudgetData = async () => {
+    if (!selectedMonth || isLoading) return;
+    
+    setIsSaving(true);
+    try {
+      // Convert local BudgetItem[] to API BudgetItem[] format
+      const convertItems = (items: BudgetItem[]): ApiBudgetItem[] => {
+        return items
+          .filter(item => item.value !== "") // Only include items with values
+          .map(item => ({
+            id: item.id,
+            value: parseFloat(item.value) || 0,
+            ...(item.user && { user: item.user }) // Only include user if it exists
+          }));
+      };
+
+      const budgetData = {
+        income_user1: convertItems(incomeUser1),
+        income_user2: convertItems(incomeUser2),
+        shared_expenses: convertItems(sharedExpenses),
+        personal_user1: convertItems(personalUser1),
+        personal_user2: convertItems(personalUser2),
+        shared_savings: convertItems(sharedSavings),
+        personal_savings_user1: convertItems(personalSavingsUser1),
+        personal_savings_user2: convertItems(personalSavingsUser2),
+      };
+
+      await api.saveBudget(selectedMonth, budgetData);
+    } catch (error) {
+      console.error('Failed to save budget:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Calculate KPIs
   const calculateTotal = (items: BudgetItem[]) => {
     return items.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
@@ -46,9 +169,9 @@ export default function BudgetPage() {
   const remaining = totalIncome - totalSharedExpenses - totalPersonalExpenses - totalSharedSavings;
 
   const formatCurrency = (num: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('da-DK', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'DKK',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(num);
@@ -69,10 +192,44 @@ export default function BudgetPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <span>Home</span>
-        <span>/</span>
-        <span className="text-gray-900 font-medium">Budget</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <span>Home</span>
+          <span>/</span>
+          <span className="text-gray-900 font-medium">Budget</span>
+        </div>
+
+        {/* Month Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMonthDropdown(!showMonthDropdown)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <span className="font-medium">
+              {months.find(m => m.key === selectedMonth)?.label || 'Select Month'}
+            </span>
+            <ChevronDown className="h-4 w-4" />
+          </button>
+          
+          {showMonthDropdown && (
+            <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
+              {months.map((month) => (
+                <button
+                  key={month.key}
+                  onClick={() => {
+                    setSelectedMonth(month.key);
+                    setShowMonthDropdown(false);
+                  }}
+                  className={`w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors ${
+                    selectedMonth === month.key ? 'bg-blue-50 text-blue-600 font-medium' : ''
+                  }`}
+                >
+                  {month.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards */}

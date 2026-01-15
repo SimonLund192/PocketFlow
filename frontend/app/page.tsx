@@ -5,16 +5,17 @@ import { ExpenseBreakdownChart } from "@/components/dashboard/ExpenseBreakdownCh
 import { Facebook, Twitter, Linkedin, Youtube } from "lucide-react";
 
 export default async function DashboardPage() {
-  const [stats, balanceTrends, expenseBreakdown] = await Promise.all([
+  const [stats, balanceTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
     api.getDashboardStats(),
     api.getBalanceTrends(),
     api.getExpenseBreakdown(),
+    api.getBudgetLifetimeStats(),
   ]);
 
   const formatCurrency = (num: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('da-DK', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'DKK',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(num);
@@ -33,33 +34,40 @@ export default async function DashboardPage() {
         <span className="text-gray-900 font-medium">Dashboard</span>
       </div>
 
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-5 gap-6">
         <StatCard
-          title="NET Income"
-          value={formatCurrency(stats.net_income)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={stats.period_change_percentage >= 0}
+          title="Total Income (Lifetime)"
+          value={formatCurrency(lifetimeStats.total_income)}
+          change=""
+          changePercent=""
+          isPositive={true}
         />
         <StatCard
-          title="Total Savings"
-          value={formatCurrency(stats.total_savings)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
-          isPositive={stats.period_change_percentage >= 0}
-        />
-        <StatCard
-          title="Total Expenses"
-          value={formatCurrency(stats.total_expenses)}
-          change={formatCurrency(stats.last_month_net_income)}
-          changePercent={formatPercentage(stats.period_change_percentage)}
+          title="Shared Expenses"
+          value={formatCurrency(lifetimeStats.total_shared_expenses)}
+          change=""
+          changePercent=""
           isPositive={false}
         />
         <StatCard
-          title="Goals Achieved"
-          value={stats.goals_achieved.toString()}
-          change="Coming soon"
-          changePercent="+0%"
+          title="Personal Expenses"
+          value={formatCurrency(lifetimeStats.total_personal_expenses)}
+          change=""
+          changePercent=""
+          isPositive={false}
+        />
+        <StatCard
+          title="Remaining"
+          value={formatCurrency(lifetimeStats.remaining)}
+          change=""
+          changePercent=""
+          isPositive={lifetimeStats.remaining >= 0}
+        />
+        <StatCard
+          title="Shared Savings"
+          value={formatCurrency(lifetimeStats.total_shared_savings)}
+          change=""
+          changePercent=""
           isPositive={true}
         />
       </div>

@@ -11,7 +11,7 @@ interface BalanceTrendsChartProps {
 export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
   // Format data for the chart
   const chartData = data.map(item => ({
-    date: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: new Date(item.date).toLocaleDateString('da-DK', { month: 'short', day: 'numeric' }),
     balance: item.balance,
   }));
 
@@ -22,6 +22,15 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
     ? (((lastBalance - firstBalance) / Math.abs(firstBalance)) * 100).toFixed(2)
     : '0.00';
 
+  const formatCurrency = (num: number) => {
+    return new Intl.NumberFormat('da-DK', {
+      style: 'currency',
+      currency: 'DKK',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(num);
+  };
+
   return (
     <Card className="col-span-2">
       <CardHeader>
@@ -29,7 +38,7 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
           <div>
             <CardTitle className="text-lg font-semibold">Balance Trends</CardTitle>
             <p className="text-3xl font-bold text-gray-900 mt-2">
-              ${lastBalance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              {formatCurrency(lastBalance)}
             </p>
           </div>
           <div className="text-right">
@@ -58,13 +67,13 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
               stroke="#94a3b8"
               fontSize={12}
               tickLine={false}
-              tickFormatter={(value) => `$${value.toLocaleString()}`}
+              tickFormatter={(value) => `${value.toLocaleString()} kr`}
             />
             <Tooltip 
               formatter={(value: number | string | undefined) => {
-                if (!value) return ['$0', 'Balance'];
+                if (!value) return ['0 kr', 'Balance'];
                 const numValue = typeof value === 'number' ? value : parseFloat(value as string);
-                return [`$${numValue.toLocaleString()}`, 'Balance'];
+                return [`${numValue.toLocaleString()} kr`, 'Balance'];
               }}
               contentStyle={{
                 backgroundColor: 'white',
