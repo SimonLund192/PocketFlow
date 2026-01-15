@@ -3,7 +3,7 @@ from typing import List
 from datetime import datetime, timedelta
 from app.models import (
     Transaction, TransactionCreate, DashboardStats, BalanceTrend, 
-    ExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
+    ExpenseBreakdown, BudgetExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
     User, UserCreate, UserLogin, Token, UserResponse,
     Category, CategoryCreate, CategoryUpdate
 )
@@ -262,6 +262,67 @@ async def get_expense_breakdown():
             amount=amount,
             percentage=percentage
         ))
+    
+    # Sort by amount descending
+    breakdown.sort(key=lambda x: x.amount, reverse=True)
+    
+    return breakdown
+
+@router.get("/dashboard/budget-expense-breakdown", response_model=List[BudgetExpenseBreakdown])
+async def get_budget_expense_breakdown(current_user: UserResponse = Depends(get_current_user)):
+    """Get expense breakdown by category from budget data, showing shared vs personal expenses"""
+    db = get_database()
+    
+    # Get all budgets for the current user
+    category_data = {}  # {category: {shared: amount, personal: amount}}
+    total_expenses = 0.0
+    
+    async for budget in db.budgets.find({"user_id": current_user.id}):
+        # Process shared expenses
+        for item in budget.get("shared_expenses", []):
+            category = item.get("category", "Uncategorized")
+            value = item.get("value", 0.0)
+            if category not in category_data:
+                category_data[category] = {"shared": 0.0, "personal": 0.0}
+            category_data[category]["shared"] += value
+            total_expenses += value
+        
+        # Process personal expenses from both users
+        for item in budget.get("personal_user1", []):
+            category = item.get("category", "Uncategorized")
+            value = item.get("value", 0.0)
+            if category not in category_data:
+                category_data[category] = {"shared": 0.0, "personal": 0.0}
+            category_data[category]["personal"] += value
+            total_expenses += value
+            
+        for item in budget.get("personal_user2", []):
+            category = item.get("category", "Uncategorized")
+            value = item.get("value", 0.0)
+            if category not in category_data:
+                category_data[category] = {"shared": 0.0, "personal": 0.0}
+            category_data[category]["personal"] += value
+            total_expenses += value
+    
+    # Create breakdown list with percentages
+    breakdown = []
+    for category, amounts in category_data.items():
+        if amounts["shared"] > 0:
+            percentage = (amounts["shared"] / total_expenses * 100) if total_expenses > 0 else 0
+            breakdown.append(BudgetExpenseBreakdown(
+                category=category,
+                amount=amounts["shared"],
+                percentage=percentage,
+                type="shared"
+            ))
+        if amounts["personal"] > 0:
+            percentage = (amounts["personal"] / total_expenses * 100) if total_expenses > 0 else 0
+            breakdown.append(BudgetExpenseBreakdown(
+                category=category,
+                amount=amounts["personal"],
+                percentage=percentage,
+                type="personal"
+            ))
     
     # Sort by amount descending
     breakdown.sort(key=lambda x: x.amount, reverse=True)

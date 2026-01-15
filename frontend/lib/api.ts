@@ -47,6 +47,13 @@ export interface ExpenseBreakdown {
   percentage: number;
 }
 
+export interface BudgetExpenseBreakdown {
+  category: string;
+  amount: number;
+  percentage: number;
+  type: 'shared' | 'personal';
+}
+
 export interface BudgetItem {
   id: string;
   name?: string;
@@ -182,6 +189,15 @@ export const api = {
   async getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
     const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch expense breakdown');
+    return res.json();
+  },
+
+  async getBudgetExpenseBreakdown(): Promise<BudgetExpenseBreakdown[]> {
+    const res = await fetch(`${API_URL}/api/dashboard/budget-expense-breakdown`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch budget expense breakdown');
     return res.json();
   },
 

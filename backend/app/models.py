@@ -76,6 +76,12 @@ class ExpenseBreakdown(BaseModel):
     amount: float
     percentage: float
 
+class BudgetExpenseBreakdown(BaseModel):
+    category: str
+    amount: float
+    percentage: float
+    type: str  # 'shared' or 'personal'
+
 class BudgetItem(BaseModel):
     id: str
     name: Optional[str] = None

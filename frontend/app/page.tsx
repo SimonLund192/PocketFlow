@@ -55,7 +55,7 @@ export default function DashboardPage() {
         const [stats, balanceTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
           api.getDashboardStats(),
           api.getBalanceTrends(),
-          api.getExpenseBreakdown(),
+          api.getBudgetExpenseBreakdown(),
           api.getBudgetLifetimeStats(),
         ]);
         setData({ stats, balanceTrends, expenseBreakdown, lifetimeStats });

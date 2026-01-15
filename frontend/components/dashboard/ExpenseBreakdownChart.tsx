@@ -1,10 +1,10 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExpenseBreakdown } from "@/lib/api";
+import { BudgetExpenseBreakdown } from "@/lib/api";
 
 interface ExpenseBreakdownChartProps {
-  data: ExpenseBreakdown[];
+  data: BudgetExpenseBreakdown[];
 }
 
 const categoryColors: Record<string, string> = {
@@ -19,48 +19,61 @@ const categoryColors: Record<string, string> = {
   "Shared Savings": "bg-teal-500",
   "Personal Savings": "bg-indigo-500",
   "Household": "bg-amber-500",
+  "Uncategorized": "bg-gray-400",
 };
 
 export function ExpenseBreakdownChart({ data }: ExpenseBreakdownChartProps) {
-  // Take top 6 categories
-  const topCategories = data.slice(0, 6);
+  // Take top items (show all since we're now splitting by type)
+  const displayItems = data.slice(0, 10);
+
+  // Calculate total for the progress bar
+  const totalPercentage = displayItems.reduce((sum, item) => sum + item.percentage, 0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg font-semibold">Monthly Expenses Breakdown</CardTitle>
+        <CardTitle className="text-2xl font-bold text-gray-900">Monthly Expenses Breakdown</CardTitle>
       </CardHeader>
-      <CardContent>
-        {/* Progress bar showing all categories */}
-        <div className="flex h-2 rounded-full overflow-hidden mb-6">
-          {topCategories.map((item, index) => (
-            <div
-              key={index}
-              className={categoryColors[item.category] || "bg-gray-400"}
-              style={{ width: `${item.percentage}%` }}
-            />
-          ))}
-        </div>
-
-        {/* Category list */}
-        <div className="space-y-4">
-          {topCategories.map((item, index) => (
-            <div key={index} className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${categoryColors[item.category] || "bg-gray-400"}`} />
-                <span className="text-sm font-medium text-gray-700">{item.category}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-semibold text-gray-900">
-                  ${item.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </span>
-                <span className="text-sm text-gray-500 w-12 text-right">
-                  {item.percentage.toFixed(0)}%
-                </span>
-              </div>
+      <CardContent className="space-y-6">
+        {data.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No expense data available. Add expenses in the Budget page.
+          </div>
+        ) : (
+          <>
+            {/* Progress bar showing all categories */}
+            <div className="flex h-3 rounded-full overflow-hidden">
+              {displayItems.map((item, index) => (
+                <div
+                  key={index}
+                  className={categoryColors[item.category] || "bg-gray-400"}
+                  style={{ width: `${(item.percentage / totalPercentage * 100) || 0}%` }}
+                  title={`${item.category} (${item.type}): ${item.percentage.toFixed(1)}%`}
+                />
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Category list */}
+            <div className="space-y-6">
+              {displayItems.map((item, index) => (
+                <div key={index} className="flex items-center justify-between border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-4 h-4 rounded-full ${categoryColors[item.category] || "bg-gray-400"}`} />
+                    <span className="text-base font-normal text-gray-500 capitalize">{item.category}</span>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <span className="text-base font-normal text-gray-500">
+                      ${item.amount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                    </span>
+                    <span className="text-2xl font-bold text-gray-900 w-20 text-right">
+                      {item.percentage.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
