@@ -1,0 +1,37 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: pocket-flow-mongodb
+    restart: always
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - budget-tracker-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pocket-flow-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      MONGODB_URL: mongodb://admin:admin123@mongodb:27017
+      DATABASE_NAME: pocketflow
+    depends_on:
+      - mongodb
+    networks:
+      - budget-tracker-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  budget-tracker-network:
+    driver: bridge
