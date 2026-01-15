@@ -4,7 +4,8 @@ from datetime import datetime, timedelta
 from app.models import (
     Transaction, TransactionCreate, DashboardStats, BalanceTrend, 
     ExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
-    User, UserCreate, UserLogin, Token, UserResponse
+    User, UserCreate, UserLogin, Token, UserResponse,
+    Category, CategoryCreate, CategoryUpdate
 )
 from app.database import get_database
 from app.auth import (
@@ -402,6 +403,115 @@ async def clear_transactions():
         "message": "All transactions cleared successfully",
         "deleted_count": result.deleted_count
     }
+
+# Category endpoints
+@router.get("/categories", response_model=List[dict])
+async def get_categories(current_user: User = Depends(get_current_user)):
+    """Get all categories for the current user"""
+    db = get_database()
+    
+    categories = await db.categories.find({"user_id": str(current_user.id)}).to_list(None)
+    
+    # Convert ObjectId to string
+    for category in categories:
+        category["id"] = str(category["_id"])
+        del category["_id"]
+        del category["user_id"]
+    
+    return categories
+
+@router.post("/categories", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def create_category(category_data: CategoryCreate, current_user: User = Depends(get_current_user)):
+    """Create a new category"""
+    db = get_database()
+    
+    # Check if category with same name and type already exists for this user
+    existing_category = await db.categories.find_one({
+        "user_id": str(current_user.id),
+        "name": category_data.name,
+        "type": category_data.type
+    })
+    
+    if existing_category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Category '{category_data.name}' already exists for {category_data.type}"
+        )
+    
+    category_dict = {
+        "user_id": str(current_user.id),
+        "name": category_data.name,
+        "icon": category_data.icon,
+        "color": category_data.color,
+        "type": category_data.type,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.categories.insert_one(category_dict)
+    new_category = await db.categories.find_one({"_id": result.inserted_id})
+    
+    # Convert ObjectId to string
+    new_category["id"] = str(new_category["_id"])
+    del new_category["_id"]
+    del new_category["user_id"]
+    
+    return new_category
+
+@router.put("/categories/{category_id}", response_model=dict)
+async def update_category(category_id: str, category_data: CategoryUpdate, current_user: User = Depends(get_current_user)):
+    """Update a category"""
+    db = get_database()
+    
+    # Check if category exists and belongs to current user
+    existing_category = await db.categories.find_one({
+        "_id": ObjectId(category_id),
+        "user_id": str(current_user.id)
+    })
+    
+    if not existing_category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
+    
+    # Build update dict with only provided fields
+    update_data = {k: v for k, v in category_data.dict(exclude_unset=True).items() if v is not None}
+    
+    if update_data:
+        await db.categories.update_one(
+            {"_id": ObjectId(category_id)},
+            {"$set": update_data}
+        )
+    
+    updated_category = await db.categories.find_one({"_id": ObjectId(category_id)})
+    
+    # Convert ObjectId to string
+    updated_category["id"] = str(updated_category["_id"])
+    del updated_category["_id"]
+    del updated_category["user_id"]
+    
+    return updated_category
+
+@router.delete("/categories/{category_id}")
+async def delete_category(category_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a category"""
+    db = get_database()
+    
+    # Check if category exists and belongs to current user
+    existing_category = await db.categories.find_one({
+        "_id": ObjectId(category_id),
+        "user_id": str(current_user.id)
+    })
+    
+    if not existing_category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
+    
+    await db.categories.delete_one({"_id": ObjectId(category_id)})
+    
+    return {"message": "Category deleted successfully"}
 
 @router.delete("/admin/clear/budgets")
 async def clear_budgets():

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +26,23 @@ interface Category {
 
 export default function SettingsPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("account");
+  
+  // Initialize activeTab from URL parameter on mount
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+  
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    router.push(`/settings?tab=${value}`, { scroll: false });
+  };
   
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -101,26 +118,26 @@ export default function SettingsPage() {
   const [categoryIcon, setCategoryIcon] = useState("");
   const [categoryColor, setCategoryColor] = useState("");
 
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([
-    { id: "1", name: "Salary", icon: "💰", color: "bg-purple-500", type: "income" },
-    { id: "2", name: "Business", icon: "💼", color: "bg-red-500", type: "income" },
-    { id: "3", name: "Client", icon: "👤", color: "bg-orange-500", type: "income" },
-    { id: "4", name: "Gifts", icon: "🎁", color: "bg-yellow-500", type: "income" },
-    { id: "5", name: "Insurance", icon: "🔒", color: "bg-yellow-600", type: "income" },
-    { id: "6", name: "Loan", icon: "💵", color: "bg-green-500", type: "income" },
-    { id: "7", name: "Other", icon: "📁", color: "bg-teal-500", type: "income" },
-  ]);
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
 
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([
-    { id: "1", name: "Beauty", icon: "💄", color: "bg-teal-500", type: "expense" },
-    { id: "2", name: "Bills & Fees", icon: "📄", color: "bg-cyan-500", type: "expense" },
-    { id: "3", name: "Car", icon: "🚗", color: "bg-cyan-400", type: "expense" },
-    { id: "4", name: "Education", icon: "🎓", color: "bg-blue-500", type: "expense" },
-    { id: "5", name: "Entertainment", icon: "🎮", color: "bg-blue-600", type: "expense" },
-    { id: "6", name: "Family", icon: "👨‍👩‍👧", color: "bg-indigo-500", type: "expense" },
-    { id: "7", name: "Food & Drink", icon: "🍔", color: "bg-purple-500", type: "expense" },
-    { id: "8", name: "Salary", icon: "💰", color: "bg-purple-600", type: "expense" },
-  ]);
+  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
+
+  // Load categories from database
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadCategories();
+    }
+  }, [isAuthenticated]);
+
+  const loadCategories = async () => {
+    try {
+      const categories = await api.getCategories();
+      setIncomeCategories(categories.filter(cat => cat.type === 'income'));
+      setExpenseCategories(categories.filter(cat => cat.type === 'expense'));
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+    }
+  };
 
   const tabs = [
     { id: "account", label: "Account" },
@@ -252,45 +269,93 @@ export default function SettingsPage() {
   const [editCategoryIcon, setEditCategoryIcon] = useState("");
   const [editCategoryColor, setEditCategoryColor] = useState("");
 
-  const handleCreateCategory = () => {
+  const handleCreateCategory = async () => {
     if (!categoryName.trim() || !categoryType || !categoryIcon || !categoryColor) {
-      alert("Please fill in all fields");
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Missing Fields',
+        message: 'Please fill in all fields to create a category.',
+        type: 'warning',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
       return;
     }
 
-    const newCategory: Category = {
-      id: Date.now().toString(),
-      name: categoryName,
-      icon: categoryIcon,
-      color: categoryColor,
-      type: categoryType as 'income' | 'expense',
-    };
+    try {
+      const newCategory = await api.createCategory({
+        name: categoryName,
+        icon: categoryIcon,
+        color: categoryColor,
+        type: categoryType as 'income' | 'expense',
+      });
 
-    if (categoryType === 'income') {
-      setIncomeCategories([...incomeCategories, newCategory]);
-    } else {
-      setExpenseCategories([...expenseCategories, newCategory]);
+      if (categoryType === 'income') {
+        setIncomeCategories([...incomeCategories, newCategory]);
+      } else {
+        setExpenseCategories([...expenseCategories, newCategory]);
+      }
+
+      // Reset form
+      setCategoryName("");
+      setCategoryType("");
+      setCategoryIcon("");
+      setCategoryColor("");
+
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Success',
+        message: 'Category created successfully!',
+        type: 'success',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
+    } catch (error: any) {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Error',
+        message: error.message || 'Failed to create category',
+        type: 'danger',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
     }
-
-    // Reset form
-    setCategoryName("");
-    setCategoryType("");
-    setCategoryIcon("");
-    setCategoryColor("");
   };
 
-  const handleDeleteCategory = (categoryId: string, type: 'income' | 'expense') => {
+  const handleDeleteCategory = async (categoryId: string, type: 'income' | 'expense') => {
     setConfirmDialog({
       isOpen: true,
       title: 'Delete Category',
       message: 'Are you sure you want to delete this category? This action cannot be undone.',
       type: 'danger',
       confirmText: 'Delete',
-      onConfirm: () => {
-        if (type === 'income') {
-          setIncomeCategories(incomeCategories.filter(cat => cat.id !== categoryId));
-        } else {
-          setExpenseCategories(expenseCategories.filter(cat => cat.id !== categoryId));
+      onConfirm: async () => {
+        try {
+          await api.deleteCategory(categoryId);
+          
+          if (type === 'income') {
+            setIncomeCategories(incomeCategories.filter(cat => cat.id !== categoryId));
+          } else {
+            setExpenseCategories(expenseCategories.filter(cat => cat.id !== categoryId));
+          }
+
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Success',
+            message: 'Category deleted successfully!',
+            type: 'success',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
+        } catch (error) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Error',
+            message: 'Failed to delete category',
+            type: 'danger',
+            confirmText: 'OK',
+            onConfirm: () => {},
+          });
         }
       },
     });
@@ -303,27 +368,56 @@ export default function SettingsPage() {
     setEditCategoryColor(category.color);
   };
 
-  const handleSaveEditCategory = (categoryId: string, type: 'income' | 'expense') => {
+  const handleSaveEditCategory = async (categoryId: string, type: 'income' | 'expense') => {
     if (!editCategoryName.trim() || !editCategoryIcon || !editCategoryColor) {
-      alert("Please fill in all fields");
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Missing Fields',
+        message: 'Please fill in all fields',
+        type: 'warning',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
       return;
     }
 
-    if (type === 'income') {
-      setIncomeCategories(incomeCategories.map(cat => 
-        cat.id === categoryId 
-          ? { ...cat, name: editCategoryName, icon: editCategoryIcon, color: editCategoryColor }
-          : cat
-      ));
-    } else {
-      setExpenseCategories(expenseCategories.map(cat => 
-        cat.id === categoryId 
-          ? { ...cat, name: editCategoryName, icon: editCategoryIcon, color: editCategoryColor }
-          : cat
-      ));
-    }
+    try {
+      const updatedCategory = await api.updateCategory(categoryId, {
+        name: editCategoryName,
+        icon: editCategoryIcon,
+        color: editCategoryColor,
+      });
 
-    setEditingCategory(null);
+      if (type === 'income') {
+        setIncomeCategories(incomeCategories.map(cat => 
+          cat.id === categoryId ? updatedCategory : cat
+        ));
+      } else {
+        setExpenseCategories(expenseCategories.map(cat => 
+          cat.id === categoryId ? updatedCategory : cat
+        ));
+      }
+
+      setEditingCategory(null);
+
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Success',
+        message: 'Category updated successfully!',
+        type: 'success',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
+    } catch (error) {
+      setConfirmDialog({
+        isOpen: true,
+        title: 'Error',
+        message: 'Failed to update category',
+        type: 'danger',
+        confirmText: 'OK',
+        onConfirm: () => {},
+      });
+    }
   };
 
   const handleCancelEdit = () => {
@@ -370,7 +464,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="w-full justify-start bg-transparent border-b border-gray-200 rounded-none h-auto p-0">
           {tabs.map((tab) => (
             <TabsTrigger

@@ -78,6 +78,8 @@ class ExpenseBreakdown(BaseModel):
 
 class BudgetItem(BaseModel):
     id: str
+    name: Optional[str] = None
+    category: Optional[str] = None
     value: float
     user: Optional[str] = None
 
@@ -148,3 +150,28 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     created_at: datetime
+
+# Category Models
+class Category(BaseModel):
+    id: Optional[str] = Field(None, alias="_id")
+    user_id: str  # User who owns this category
+    name: str
+    icon: str
+    color: str
+    type: str  # 'income' or 'expense'
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Config:
+        populate_by_name = True
+
+class CategoryCreate(BaseModel):
+    name: str
+    icon: str
+    color: str
+    type: str  # 'income' or 'expense'
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    type: Optional[str] = None

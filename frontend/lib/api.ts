@@ -49,6 +49,8 @@ export interface ExpenseBreakdown {
 
 export interface BudgetItem {
   id: string;
+  name?: string;
+  category?: string;
   value: number;
   user?: string;
 }
@@ -95,6 +97,29 @@ export interface RegisterData {
 export interface AuthToken {
   access_token: string;
   token_type: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  type: 'income' | 'expense';
+  created_at?: string;
+}
+
+export interface CategoryCreate {
+  name: string;
+  icon: string;
+  color: string;
+  type: 'income' | 'expense';
+}
+
+export interface CategoryUpdate {
+  name?: string;
+  icon?: string;
+  color?: string;
+  type?: 'income' | 'expense';
 }
 
 export const api = {
@@ -195,6 +220,48 @@ export const api = {
       cache: 'no-store',
     });
     if (!res.ok) throw new Error('Failed to fetch lifetime budget stats');
+    return res.json();
+  },
+
+  // Category endpoints
+  async getCategories(): Promise<Category[]> {
+    const res = await fetch(`${API_URL}/api/categories`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch categories');
+    return res.json();
+  },
+
+  async createCategory(data: CategoryCreate): Promise<Category> {
+    const res = await fetch(`${API_URL}/api/categories`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Failed to create category');
+    }
+    return res.json();
+  },
+
+  async updateCategory(id: string, data: CategoryUpdate): Promise<Category> {
+    const res = await fetch(`${API_URL}/api/categories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update category');
+    return res.json();
+  },
+
+  async deleteCategory(id: string): Promise<{ message: string }> {
+    const res = await fetch(`${API_URL}/api/categories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete category');
     return res.json();
   },
 

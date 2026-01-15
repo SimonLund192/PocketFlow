@@ -7,10 +7,12 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, ChevronDown } from "lucide-react";
-import { api, BudgetItem as ApiBudgetItem } from "@/lib/api";
+import { api, BudgetItem as ApiBudgetItem, Category } from "@/lib/api";
 
 interface BudgetItem {
   id: string;
+  name: string;
+  category: string;
   value: string;
   user?: string;
 }
@@ -57,22 +59,53 @@ export default function BudgetPage() {
   }, []);
   
   // Income items - two columns for users
-  const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 1" }]);
-  const [incomeUser2, setIncomeUser2] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 2" }]);
+  const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [incomeUser2, setIncomeUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
   
   // Shared Expenses - single column
-  const [sharedExpenses, setSharedExpenses] = useState<BudgetItem[]>([{ id: "1", value: "" }]);
+  const [sharedExpenses, setSharedExpenses] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "" }]);
   
   // Personal Expenses - two columns for users
-  const [personalUser1, setPersonalUser1] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 1" }]);
-  const [personalUser2, setPersonalUser2] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 2" }]);
+  const [personalUser1, setPersonalUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [personalUser2, setPersonalUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
   
   // Shared Savings - single column
-  const [sharedSavings, setSharedSavings] = useState<BudgetItem[]>([{ id: "1", value: "" }]);
+  const [sharedSavings, setSharedSavings] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "" }]);
   
   // Personal Savings - two columns for users
-  const [personalSavingsUser1, setPersonalSavingsUser1] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 1" }]);
-  const [personalSavingsUser2, setPersonalSavingsUser2] = useState<BudgetItem[]>([{ id: "1", value: "", user: "User 2" }]);
+  const [personalSavingsUser1, setPersonalSavingsUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 1" }]);
+  const [personalSavingsUser2, setPersonalSavingsUser2] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: "User 2" }]);
+
+  // Categories loaded from database
+  const [incomeCategories, setIncomeCategories] = useState<string[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<string[]>([]);
+  const [savingsCategories, setSavingsCategories] = useState<string[]>([]);
+
+  // Load categories from database
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadCategories();
+    }
+  }, [isAuthenticated]);
+
+  const loadCategories = async () => {
+    try {
+      const categories = await api.getCategories();
+      const income = categories.filter(cat => cat.type === 'income').map(cat => cat.name);
+      const expense = categories.filter(cat => cat.type === 'expense').map(cat => cat.name);
+      
+      setIncomeCategories(income);
+      setExpenseCategories(expense);
+      // For now, use expense categories for savings as well, or you could add a 'savings' type
+      setSavingsCategories(expense);
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+      // Set default categories as fallback
+      setIncomeCategories(["Salary", "Freelance", "Investment", "Business", "Other"]);
+      setExpenseCategories(["Housing", "Food", "Transportation", "Utilities", "Healthcare", "Entertainment", "Shopping", "Education", "Other"]);
+      setSavingsCategories(["Emergency Fund", "Retirement", "Investment", "Travel", "Education", "House", "Other"]);
+    }
+  };
 
   // Load budget data from API when month changes
   useEffect(() => {
@@ -89,10 +122,12 @@ export default function BudgetPage() {
       // Convert API BudgetItem[] to local BudgetItem[] format
       const convertItems = (items: ApiBudgetItem[]): BudgetItem[] => {
         if (!items || items.length === 0) {
-          return [{ id: "1", value: "", user: undefined }];
+          return [{ id: "1", name: "", category: "", value: "", user: undefined }];
         }
         return items.map(item => ({
           id: item.id,
+          name: item.name || "",
+          category: item.category || "",
           value: item.value.toString(),
           user: item.user
         }));
@@ -135,6 +170,8 @@ export default function BudgetPage() {
           .filter(item => item.value !== "") // Only include items with values
           .map(item => ({
             id: item.id,
+            name: item.name,
+            category: item.category,
             value: parseFloat(item.value) || 0,
             ...(item.user && { user: item.user }) // Only include user if it exists
           }));
@@ -181,7 +218,7 @@ export default function BudgetPage() {
 
   // Helper functions for managing items
   const addItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, user?: string) => {
-    setter(prev => [...prev, { id: Date.now().toString(), value: "", user }]);
+    setter(prev => [...prev, { id: Date.now().toString(), name: "", category: "", value: "", user }]);
   };
 
   const removeItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string) => {
@@ -190,6 +227,14 @@ export default function BudgetPage() {
 
   const updateItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string, value: string) => {
     setter(prev => prev.map(item => item.id === id ? { ...item, value } : item));
+  };
+
+  const updateItemName = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string, name: string) => {
+    setter(prev => prev.map(item => item.id === id ? { ...item, name } : item));
+  };
+
+  const updateItemCategory = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string, category: string) => {
+    setter(prev => prev.map(item => item.id === id ? { ...item, category } : item));
   };
 
   if (authLoading) {
@@ -311,18 +356,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {incomeUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setIncomeUser1, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setIncomeUser1, item.id, e.target.value)}
+                          placeholder="Name (e.g., Monthly Salary)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setIncomeUser1, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {incomeCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              incomeCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setIncomeUser1, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {incomeUser1.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setIncomeUser1, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -344,18 +415,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {incomeUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setIncomeUser2, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setIncomeUser2, item.id, e.target.value)}
+                          placeholder="Name (e.g., Freelance Work)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setIncomeUser2, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {incomeCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              incomeCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setIncomeUser2, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {incomeUser2.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setIncomeUser2, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -380,18 +477,44 @@ export default function BudgetPage() {
             <div className="space-y-2">
               {sharedExpenses.map(item => (
                 <div key={item.id} className="flex gap-2">
-                  <input
-                    type="number"
-                    value={item.value}
-                    onChange={(e) => updateItem(setSharedExpenses, item.id, e.target.value)}
-                    placeholder="Enter amount"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => updateItemName(setSharedExpenses, item.id, e.target.value)}
+                      placeholder="Name (e.g., Rent, Utilities)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={item.category}
+                        onChange={(e) => updateItemCategory(setSharedExpenses, item.id, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Select Category</option>
+                        {expenseCategories.length === 0 ? (
+                          <option value="" disabled>No categories - Create in Settings</option>
+                        ) : (
+                          expenseCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))
+                        )}
+                      </select>
+                      <input
+                        type="number"
+                        value={item.value}
+                        onChange={(e) => updateItem(setSharedExpenses, item.id, e.target.value)}
+                        placeholder="Amount"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                   {sharedExpenses.length > 1 && (
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => removeItem(setSharedExpenses, item.id)}
+                      className="self-start mt-0"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -417,18 +540,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {personalUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setPersonalUser1, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setPersonalUser1, item.id, e.target.value)}
+                          placeholder="Name (e.g., Gym Membership)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setPersonalUser1, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {expenseCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              expenseCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setPersonalUser1, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {personalUser1.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setPersonalUser1, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -450,18 +599,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {personalUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setPersonalUser2, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setPersonalUser2, item.id, e.target.value)}
+                          placeholder="Name (e.g., Coffee)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setPersonalUser2, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {expenseCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              expenseCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setPersonalUser2, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {personalUser2.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setPersonalUser2, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -486,18 +661,44 @@ export default function BudgetPage() {
             <div className="space-y-2">
               {sharedSavings.map(item => (
                 <div key={item.id} className="flex gap-2">
-                  <input
-                    type="number"
-                    value={item.value}
-                    onChange={(e) => updateItem(setSharedSavings, item.id, e.target.value)}
-                    placeholder="Enter amount"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      value={item.name}
+                      onChange={(e) => updateItemName(setSharedSavings, item.id, e.target.value)}
+                      placeholder="Name (e.g., Vacation Fund)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={item.category}
+                        onChange={(e) => updateItemCategory(setSharedSavings, item.id, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      >
+                        <option value="">Select Category</option>
+                        {savingsCategories.length === 0 ? (
+                          <option value="" disabled>No categories - Create in Settings</option>
+                        ) : (
+                          savingsCategories.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))
+                        )}
+                      </select>
+                      <input
+                        type="number"
+                        value={item.value}
+                        onChange={(e) => updateItem(setSharedSavings, item.id, e.target.value)}
+                        placeholder="Amount"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                   {sharedSavings.length > 1 && (
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => removeItem(setSharedSavings, item.id)}
+                      className="self-start mt-0"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -523,18 +724,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {personalSavingsUser1.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setPersonalSavingsUser1, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setPersonalSavingsUser1, item.id, e.target.value)}
+                          placeholder="Name (e.g., Retirement Fund)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setPersonalSavingsUser1, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {savingsCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              savingsCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setPersonalSavingsUser1, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {personalSavingsUser1.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setPersonalSavingsUser1, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -556,18 +783,44 @@ export default function BudgetPage() {
                 <div className="space-y-2">
                   {personalSavingsUser2.map(item => (
                     <div key={item.id} className="flex gap-2">
-                      <input
-                        type="number"
-                        value={item.value}
-                        onChange={(e) => updateItem(setPersonalSavingsUser2, item.id, e.target.value)}
-                        placeholder="Enter amount"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(e) => updateItemName(setPersonalSavingsUser2, item.id, e.target.value)}
+                          placeholder="Name (e.g., Emergency Fund)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <div className="flex gap-2">
+                          <select
+                            value={item.category}
+                            onChange={(e) => updateItemCategory(setPersonalSavingsUser2, item.id, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="">Select Category</option>
+                            {savingsCategories.length === 0 ? (
+                              <option value="" disabled>No categories - Create in Settings</option>
+                            ) : (
+                              savingsCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))
+                            )}
+                          </select>
+                          <input
+                            type="number"
+                            value={item.value}
+                            onChange={(e) => updateItem(setPersonalSavingsUser2, item.id, e.target.value)}
+                            placeholder="Amount"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                       {personalSavingsUser2.length > 1 && (
                         <Button
                           variant="outline"
                           size="icon"
                           onClick={() => removeItem(setPersonalSavingsUser2, item.id)}
+                          className="self-start mt-0"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
