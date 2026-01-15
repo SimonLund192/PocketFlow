@@ -207,8 +207,20 @@ class Goal(BaseModel):
     color: str = "bg-green-500"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        populate_by_name = True
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
+            "example": {
+                "id": "507f1f77bcf86cd799439011",
+                "user_id": "user123",
+                "name": "Buy a car",
+                "saved": 5000.0,
+                "target": 20000.0,
+                "percentage": 25.0,
+                "color": "bg-green-500"
+            }
+        }
+    }
 
 class GoalCreate(BaseModel):
     name: str

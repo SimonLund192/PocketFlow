@@ -694,7 +694,7 @@ async def delete_category(category_id: str, current_user: User = Depends(get_cur
     return {"message": "Category deleted successfully"}
 
 # Goal endpoints
-@router.get("/goals", response_model=List[Goal])
+@router.get("/goals", response_model=List[Goal], response_model_by_alias=False)
 async def get_goals(current_user: User = Depends(get_current_user)):
     """Get all goals for the current user"""
     db = get_database()
@@ -702,7 +702,7 @@ async def get_goals(current_user: User = Depends(get_current_user)):
     goals_cursor = db.goals.find({"user_id": str(current_user.id)})
     goals = await goals_cursor.to_list(length=None)
     
-    return [
+    result = [
         Goal(
             id=str(goal["_id"]),
             user_id=goal["user_id"],
@@ -715,8 +715,10 @@ async def get_goals(current_user: User = Depends(get_current_user)):
         )
         for goal in goals
     ]
+    
+    return result
 
-@router.post("/goals", response_model=Goal, status_code=status.HTTP_201_CREATED)
+@router.post("/goals", response_model=Goal, response_model_by_alias=False, status_code=status.HTTP_201_CREATED)
 async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_current_user)):
     """Create a new goal"""
     db = get_database()
@@ -748,7 +750,7 @@ async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_cu
         created_at=new_goal["created_at"]
     )
 
-@router.put("/goals/{goal_id}", response_model=Goal)
+@router.put("/goals/{goal_id}", response_model=Goal, response_model_by_alias=False)
 async def update_goal(goal_id: str, goal_data: GoalUpdate, current_user: User = Depends(get_current_user)):
     """Update an existing goal"""
     db = get_database()
@@ -806,9 +808,18 @@ async def delete_goal(goal_id: str, current_user: User = Depends(get_current_use
     """Delete a goal"""
     db = get_database()
     
+    # Validate ObjectId format
+    try:
+        goal_object_id = ObjectId(goal_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid goal ID format"
+        )
+    
     # Check if goal exists and belongs to user
     existing_goal = await db.goals.find_one({
-        "_id": ObjectId(goal_id),
+        "_id": goal_object_id,
         "user_id": str(current_user.id)
     })
     
@@ -818,9 +829,20 @@ async def delete_goal(goal_id: str, current_user: User = Depends(get_current_use
             detail="Goal not found"
         )
     
-    await db.goals.delete_one({"_id": ObjectId(goal_id)})
+    await db.goals.delete_one({"_id": goal_object_id})
     
     return {"message": "Goal deleted successfully"}
+
+@router.delete("/admin/clear/goals")
+async def clear_goals():
+    """Clear all goals from the database"""
+    db = get_database()
+    
+    result = await db.goals.delete_many({})
+    return {
+        "message": "All goals cleared successfully",
+        "deleted_count": result.deleted_count
+    }
 
 @router.delete("/admin/clear/budgets")
 async def clear_budgets():
