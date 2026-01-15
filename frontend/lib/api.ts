@@ -38,7 +38,8 @@ export interface DashboardStats {
 
 export interface BalanceTrend {
   date: string;
-  balance: number;
+  shared_savings: number;
+  personal_savings: number;
 }
 
 export interface SavingsTrend {
@@ -222,7 +223,10 @@ export const api = {
   },
 
   async getBalanceTrends(): Promise<BalanceTrend[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/balance-trends`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/dashboard/balance-trends`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error('Failed to fetch balance trends');
     return res.json();
   },

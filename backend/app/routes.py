@@ -192,39 +192,54 @@ async def get_dashboard_stats():
         last_month_net_income=last_month_net_income
     )
 
-@router.get("/dashboard/balance-trends", response_model=List[BalanceTrend])
-async def get_balance_trends():
-    """Get balance trends for the chart"""
+@router.get("/dashboard/balance-trends")
+async def get_balance_trends(current_user: UserResponse = Depends(get_current_user)):
+    """Get cumulative shared and personal savings trends over time"""
     db = get_database()
     
-    # Get all transactions sorted by date
-    transactions = []
-    async for transaction in db.transactions.find().sort("date", 1):
-        transactions.append(transaction)
+    # Get all budgets for the user, sorted by month
+    budgets = []
+    async for budget in db.budgets.find({"user_id": current_user.id}).sort("month", 1):
+        budgets.append(budget)
     
-    if not transactions:
+    if not budgets:
         return []
     
-    # Calculate running balance
     balance_trends = []
-    current_balance = 0
+    cumulative_shared = 0.0
+    cumulative_personal = 0.0
     
-    # Group by date
-    from collections import defaultdict
-    daily_balances = defaultdict(float)
-    
-    for transaction in transactions:
-        date_str = transaction["date"].strftime("%Y-%m-%d")
-        if transaction["type"] == "income":
-            current_balance += transaction["amount"]
+    for budget in budgets:
+        # Calculate shared savings for this month
+        month_shared = 0.0
+        for item in budget.get("shared_savings", []):
+            month_shared += item.get("value", 0.0)
+        
+        # Calculate personal savings for this month (both users)
+        month_personal = 0.0
+        for item in budget.get("personal_savings_user1", []):
+            month_personal += item.get("value", 0.0)
+        for item in budget.get("personal_savings_user2", []):
+            month_personal += item.get("value", 0.0)
+        
+        # Add to cumulative totals
+        cumulative_shared += month_shared
+        cumulative_personal += month_personal
+        
+        # Format date as YYYY-MM-01 for the first of the month
+        month_str = budget.get("month", "")
+        if month_str:
+            date_str = f"{month_str}-01"
         else:
-            current_balance -= transaction["amount"]
-        daily_balances[date_str] = current_balance
+            date_str = "2026-01-01"
+        
+        balance_trends.append({
+            "date": date_str,
+            "shared_savings": cumulative_shared,
+            "personal_savings": cumulative_personal
+        })
     
-    # Convert to list
-    for date_str, balance in sorted(daily_balances.items()):
-        balance_trends.append(BalanceTrend(date=date_str, balance=balance))
-    
+    print(f"DEBUG: Returning balance_trends: {balance_trends}")
     return balance_trends
 
 @router.get("/dashboard/savings-trends", response_model=List[SavingsTrend])
