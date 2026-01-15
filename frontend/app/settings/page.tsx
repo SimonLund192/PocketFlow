@@ -1576,7 +1576,7 @@ export default function SettingsPage() {
 
       {/* Footer */}
       <footer className="flex items-center justify-between pt-8 border-t border-gray-200 text-sm text-gray-500">
-        <p>© Copyright 2026 <span className="text-blue-600 font-medium">Ekash</span> | All Rights Reserved</p>
+        <p>© Copyright 2026 PocketFlow | All Rights Reserved</p>
         <div className="flex items-center gap-4">
           <a href="#" className="hover:text-gray-700 transition-colors">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
