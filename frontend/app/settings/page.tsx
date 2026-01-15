@@ -21,7 +21,7 @@ interface Category {
   name: string;
   icon: string;
   color: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'savings';
 }
 
 export default function SettingsPage() {
@@ -122,6 +122,8 @@ export default function SettingsPage() {
 
   const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
 
+  const [savingsCategories, setSavingsCategories] = useState<Category[]>([]);
+
   // Load categories from database
   useEffect(() => {
     if (isAuthenticated) {
@@ -134,6 +136,7 @@ export default function SettingsPage() {
       const categories = await api.getCategories();
       setIncomeCategories(categories.filter(cat => cat.type === 'income'));
       setExpenseCategories(categories.filter(cat => cat.type === 'expense'));
+      setSavingsCategories(categories.filter(cat => cat.type === 'savings'));
     } catch (error) {
       console.error('Failed to load categories:', error);
     }
@@ -287,13 +290,15 @@ export default function SettingsPage() {
         name: categoryName,
         icon: categoryIcon,
         color: categoryColor,
-        type: categoryType as 'income' | 'expense',
+        type: categoryType as 'income' | 'expense' | 'savings',
       });
 
       if (categoryType === 'income') {
         setIncomeCategories([...incomeCategories, newCategory]);
-      } else {
+      } else if (categoryType === 'expense') {
         setExpenseCategories([...expenseCategories, newCategory]);
+      } else {
+        setSavingsCategories([...savingsCategories, newCategory]);
       }
 
       // Reset form
@@ -322,7 +327,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteCategory = async (categoryId: string, type: 'income' | 'expense') => {
+  const handleDeleteCategory = async (categoryId: string, type: 'income' | 'expense' | 'savings') => {
     setConfirmDialog({
       isOpen: true,
       title: 'Delete Category',
@@ -335,8 +340,10 @@ export default function SettingsPage() {
           
           if (type === 'income') {
             setIncomeCategories(incomeCategories.filter(cat => cat.id !== categoryId));
-          } else {
+          } else if (type === 'expense') {
             setExpenseCategories(expenseCategories.filter(cat => cat.id !== categoryId));
+          } else {
+            setSavingsCategories(savingsCategories.filter(cat => cat.id !== categoryId));
           }
 
           setConfirmDialog({
@@ -368,7 +375,7 @@ export default function SettingsPage() {
     setEditCategoryColor(category.color);
   };
 
-  const handleSaveEditCategory = async (categoryId: string, type: 'income' | 'expense') => {
+  const handleSaveEditCategory = async (categoryId: string, type: 'income' | 'expense' | 'savings') => {
     if (!editCategoryName.trim() || !editCategoryIcon || !editCategoryColor) {
       setConfirmDialog({
         isOpen: true,
@@ -392,8 +399,12 @@ export default function SettingsPage() {
         setIncomeCategories(incomeCategories.map(cat => 
           cat.id === categoryId ? updatedCategory : cat
         ));
-      } else {
+      } else if (type === 'expense') {
         setExpenseCategories(expenseCategories.map(cat => 
+          cat.id === categoryId ? updatedCategory : cat
+        ));
+      } else {
+        setSavingsCategories(savingsCategories.map(cat => 
           cat.id === categoryId ? updatedCategory : cat
         ));
       }
@@ -643,6 +654,7 @@ export default function SettingsPage() {
                   <option value="">Choose...</option>
                   <option value="income">Income</option>
                   <option value="expense">Expense</option>
+                  <option value="savings">Savings</option>
                 </select>
               </div>
 
@@ -891,6 +903,100 @@ export default function SettingsPage() {
                           </button>
                           <button 
                             onClick={() => handleDeleteCategory(category.id, 'expense')}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Savings Categories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold text-gray-700">
+                  Savings Categories
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {savingsCategories.map((category) => (
+                  <div
+                    key={category.id}
+                    className="flex items-center gap-4 py-3 px-2 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    {editingCategory === category.id ? (
+                      <>
+                        {/* Edit Mode */}
+                        <input
+                          type="text"
+                          value={editCategoryIcon}
+                          onChange={(e) => setEditCategoryIcon(e.target.value)}
+                          className="w-12 px-2 py-1 border border-gray-300 rounded text-center"
+                          placeholder="🎁"
+                        />
+                        <input
+                          type="text"
+                          value={editCategoryName}
+                          onChange={(e) => setEditCategoryName(e.target.value)}
+                          className="flex-1 px-3 py-1 border border-gray-300 rounded"
+                          placeholder="Category name"
+                        />
+                        <select
+                          value={editCategoryColor}
+                          onChange={(e) => setEditCategoryColor(e.target.value)}
+                          className="px-3 py-1 border border-gray-300 rounded"
+                        >
+                          <option value="bg-blue-500">Blue</option>
+                          <option value="bg-red-500">Red</option>
+                          <option value="bg-green-500">Green</option>
+                          <option value="bg-yellow-500">Yellow</option>
+                          <option value="bg-purple-500">Purple</option>
+                          <option value="bg-pink-500">Pink</option>
+                          <option value="bg-orange-500">Orange</option>
+                          <option value="bg-teal-500">Teal</option>
+                          <option value="bg-cyan-500">Cyan</option>
+                          <option value="bg-indigo-500">Indigo</option>
+                        </select>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleSaveEditCategory(category.id, 'savings')}
+                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={handleCancelEdit}
+                            className="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white text-sm"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* View Mode */}
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                          </svg>
+                        </div>
+                        <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white text-lg flex-shrink-0`}>
+                          {category.icon}
+                        </div>
+                        <span className="flex-1 text-gray-700 font-medium">{category.name}</span>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => startEditCategory(category)}
+                            className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4 text-blue-600" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteCategory(category.id, 'savings')}
                             className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-4 h-4 text-red-600" />

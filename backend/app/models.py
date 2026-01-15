@@ -71,6 +71,12 @@ class BalanceTrend(BaseModel):
     date: str
     balance: float
 
+class SavingsTrend(BaseModel):
+    month: str
+    shared_savings: float
+    personal_savings: float
+    total_savings: float
+
 class ExpenseBreakdown(BaseModel):
     category: str
     amount: float
@@ -164,7 +170,7 @@ class Category(BaseModel):
     name: str
     icon: str
     color: str
-    type: str  # 'income' or 'expense'
+    type: str  # 'income', 'expense', or 'savings'
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     class Config:

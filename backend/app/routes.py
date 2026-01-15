@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from datetime import datetime, timedelta
 from app.models import (
-    Transaction, TransactionCreate, DashboardStats, BalanceTrend, 
+    Transaction, TransactionCreate, DashboardStats, BalanceTrend, SavingsTrend,
     ExpenseBreakdown, BudgetExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
     User, UserCreate, UserLogin, Token, UserResponse,
     Category, CategoryCreate, CategoryUpdate
@@ -225,6 +225,61 @@ async def get_balance_trends():
         balance_trends.append(BalanceTrend(date=date_str, balance=balance))
     
     return balance_trends
+
+@router.get("/dashboard/savings-trends", response_model=List[SavingsTrend])
+async def get_savings_trends(current_user: UserResponse = Depends(get_current_user)):
+    """Get cumulative savings trends by month for the current user"""
+    db = get_database()
+    
+    # Get all budgets for the user, sorted by month
+    budgets = []
+    async for budget in db.budgets.find({"user_id": current_user.id}).sort("month", 1):
+        budgets.append(budget)
+    
+    if not budgets:
+        return []
+    
+    savings_trends = []
+    cumulative_shared = 0.0
+    cumulative_personal = 0.0
+    
+    for budget in budgets:
+        # Calculate shared savings for this month
+        month_shared = 0.0
+        for item in budget.get("shared_savings", []):
+            month_shared += item.get("value", 0.0)
+        
+        # Calculate personal savings for this month (both users)
+        month_personal = 0.0
+        for item in budget.get("personal_savings_user1", []):
+            month_personal += item.get("value", 0.0)
+        for item in budget.get("personal_savings_user2", []):
+            month_personal += item.get("value", 0.0)
+        
+        # Add to cumulative totals
+        cumulative_shared += month_shared
+        cumulative_personal += month_personal
+        
+        # Format month for display (YYYY-MM -> Month Year)
+        month_str = budget.get("month", "")
+        if month_str:
+            from datetime import datetime
+            try:
+                month_date = datetime.strptime(month_str, "%Y-%m")
+                display_month = month_date.strftime("%b %Y")
+            except:
+                display_month = month_str
+        else:
+            display_month = "Unknown"
+        
+        savings_trends.append(SavingsTrend(
+            month=display_month,
+            shared_savings=cumulative_shared,
+            personal_savings=cumulative_personal,
+            total_savings=cumulative_shared + cumulative_personal
+        ))
+    
+    return savings_trends
 
 @router.get("/dashboard/expense-breakdown", response_model=List[ExpenseBreakdown])
 async def get_expense_breakdown():

@@ -97,11 +97,11 @@ export default function BudgetPage() {
       const categories = await api.getCategories();
       const income = categories.filter(cat => cat.type === 'income').map(cat => cat.name);
       const expense = categories.filter(cat => cat.type === 'expense').map(cat => cat.name);
+      const savings = categories.filter(cat => cat.type === 'savings').map(cat => cat.name);
       
       setIncomeCategories(income);
       setExpenseCategories(expense);
-      // For now, use expense categories for savings as well, or you could add a 'savings' type
-      setSavingsCategories(expense);
+      setSavingsCategories(savings);
     } catch (error) {
       console.error('Failed to load categories:', error);
       // Set default categories as fallback

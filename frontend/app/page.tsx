@@ -6,11 +6,13 @@ import { api } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BalanceTrendsChart } from "@/components/dashboard/BalanceTrendsChart";
 import { ExpenseBreakdownChart } from "@/components/dashboard/ExpenseBreakdownChart";
+import { SavingsTrendsChart } from "@/components/dashboard/SavingsTrendsChart";
 import { Facebook, Twitter, Linkedin, Youtube } from "lucide-react";
 
 interface DashboardData {
   stats: any;
   balanceTrends: any[];
+  savingsTrends: any[];
   expenseBreakdown: any[];
   lifetimeStats: any;
 }
@@ -37,6 +39,7 @@ export default function DashboardPage() {
             last_month_net_income: 0,
           },
           balanceTrends: [],
+          savingsTrends: [],
           expenseBreakdown: [],
           lifetimeStats: {
             total_income: 0,
@@ -52,13 +55,14 @@ export default function DashboardPage() {
 
       try {
         setIsLoading(true);
-        const [stats, balanceTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
+        const [stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
           api.getDashboardStats(),
           api.getBalanceTrends(),
+          api.getSavingsTrends(),
           api.getBudgetExpenseBreakdown(),
           api.getBudgetLifetimeStats(),
         ]);
-        setData({ stats, balanceTrends, expenseBreakdown, lifetimeStats });
+        setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats });
         setError(null);
       } catch (err: any) {
         console.error('Failed to fetch dashboard data:', err);
@@ -109,7 +113,7 @@ export default function DashboardPage() {
 
   if (!data) return null;
 
-  const { lifetimeStats, balanceTrends, expenseBreakdown } = data;
+  const { lifetimeStats, balanceTrends, savingsTrends, expenseBreakdown } = data;
 
   // Calculate KPIs
   const totalExpenses = lifetimeStats.total_shared_expenses + lifetimeStats.total_personal_expenses;
@@ -154,6 +158,11 @@ export default function DashboardPage() {
       <div className="grid grid-cols-3 gap-8">
         <BalanceTrendsChart data={balanceTrends} />
         <ExpenseBreakdownChart data={expenseBreakdown} />
+      </div>
+
+      {/* Savings Trends - Full Width */}
+      <div className="w-full">
+        <SavingsTrendsChart data={savingsTrends} />
       </div>
 
       {/* Footer */}

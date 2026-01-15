@@ -41,6 +41,13 @@ export interface BalanceTrend {
   balance: number;
 }
 
+export interface SavingsTrend {
+  month: string;
+  shared_savings: number;
+  personal_savings: number;
+  total_savings: number;
+}
+
 export interface ExpenseBreakdown {
   category: string;
   amount: number;
@@ -111,7 +118,7 @@ export interface Category {
   name: string;
   icon: string;
   color: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'savings';
   created_at?: string;
 }
 
@@ -119,7 +126,7 @@ export interface CategoryCreate {
   name: string;
   icon: string;
   color: string;
-  type: 'income' | 'expense';
+  type: 'income' | 'expense' | 'savings';
 }
 
 export interface CategoryUpdate {
@@ -183,6 +190,15 @@ export const api = {
   async getBalanceTrends(): Promise<BalanceTrend[]> {
     const res = await fetch(`${API_URL}/api/dashboard/balance-trends`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch balance trends');
+    return res.json();
+  },
+
+  async getSavingsTrends(): Promise<SavingsTrend[]> {
+    const res = await fetch(`${API_URL}/api/dashboard/savings-trends`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch savings trends');
     return res.json();
   },
 
