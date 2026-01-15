@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -22,20 +23,16 @@ interface Category {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("security");
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState("account");
   
   // Social Security Card
-  const [ssnName, setSsnName] = useState("Carla Pascle");
+  const [ssnName, setSsnName] = useState("");
   const [ssnNumber, setSsnNumber] = useState("0024 5687 2254 3698");
   const [ssnVerified, setSsnVerified] = useState(true);
 
   // Email Verification
-  const [emails, setEmails] = useState<VerificationItem[]>([
-    { id: "1", value: "hello@example.com", verified: true },
-    { id: "2", value: "hello@example.com", verified: true },
-    { id: "3", value: "hello@example.com", verified: true },
-    { id: "4", value: "hello@example.com", verified: false },
-  ]);
+  const [emails, setEmails] = useState<VerificationItem[]>([]);
   const [newEmail, setNewEmail] = useState("");
 
   // Phone Verification
@@ -48,16 +45,39 @@ export default function SettingsPage() {
   const [newPhone, setNewPhone] = useState("");
 
   // Profile form data
-  const [profileName, setProfileName] = useState("Hafsa Humaira");
-  const [profileEmail, setProfileEmail] = useState("Hello@example.com");
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
   const [profileNewEmail, setProfileNewEmail] = useState("");
   const [profilePassword, setProfilePassword] = useState("**********");
-  const [personalFullName, setPersonalFullName] = useState("Hafsa Humaira");
-  const [personalEmail, setPersonalEmail] = useState("Hello@example.com");
+  const [personalFullName, setPersonalFullName] = useState("");
+  const [personalEmail, setPersonalEmail] = useState("");
   const [personalAddress, setPersonalAddress] = useState("123, Central Square, Brooklyn");
   const [personalCity, setPersonalCity] = useState("New York");
   const [personalPostCode, setPersonalPostCode] = useState("25481");
   const [personalCountry, setPersonalCountry] = useState("Select");
+
+  // Load user data when authenticated
+  useEffect(() => {
+    if (user) {
+      // Set name fields
+      setSsnName(user.full_name);
+      setProfileName(user.full_name);
+      setPersonalFullName(user.full_name);
+      
+      // Set email fields
+      setProfileEmail(user.email);
+      setPersonalEmail(user.email);
+      
+      // Add user's email to email list if not already there
+      setEmails(prev => {
+        const hasEmail = prev.some(e => e.value === user.email);
+        if (!hasEmail) {
+          return [{ id: "1", value: user.email, verified: true }];
+        }
+        return prev;
+      });
+    }
+  }, [user]);
 
   // Categories
   const [categoryName, setCategoryName] = useState("");
@@ -147,12 +167,31 @@ export default function SettingsPage() {
     }
   };
 
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-gray-500">Loading settings...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900">Settings</h2>
+          <p className="text-gray-500">Please login or create an account to access settings.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Security</h1>
-        <p className="text-gray-500">Welcome Ekash Finance Management</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Account</h1>
+        <p className="text-gray-500">Welcome {user?.full_name || 'to PocketFlow Finance Management'}</p>
       </div>
 
       {/* Breadcrumb */}
@@ -160,7 +199,7 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2 text-sm text-gray-500">
           <span>Home</span>
           <span>›</span>
-          <span className="text-gray-900 font-medium">Security</span>
+          <span className="text-gray-900 font-medium">Account</span>
         </div>
       </div>
 
@@ -505,13 +544,13 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                     <img 
-                      src="https://ui-avatars.com/api/?name=Hafsa+Humaira&size=64&background=4E4EFF&color=fff" 
+                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.full_name || 'User')}&size=64&background=4E4EFF&color=fff`}
                       alt="Profile" 
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-base font-semibold text-gray-900">Hafsa Humaira</h3>
+                    <h3 className="text-base font-semibold text-gray-900">{user?.full_name || 'User'}</h3>
                     <p className="text-sm text-blue-500">Max file size is 20mb</p>
                   </div>
                 </div>
@@ -693,15 +732,19 @@ export default function SettingsPage() {
                 <div className="flex items-start gap-4">
                   <div className="w-16 h-16 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
                     <img 
-                      src="https://ui-avatars.com/api/?name=Hafsa+Humaira&size=64&background=4E4EFF&color=fff" 
+                      src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.full_name || 'User')}&size=64&background=4E4EFF&color=fff`}
                       alt="Profile" 
                       className="w-full h-full object-cover"
                     />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Welcome, Hafsa Humaira!</h3>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Welcome, {user?.full_name}!</h3>
                     <p className="text-sm text-gray-500">
-                      Looks like you are not verified yet. Verify yourself to use the full potential of Ekash.
+                      Account created on {user?.created_at ? new Date(user.created_at).toLocaleDateString('da-DK', { 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      }) : 'Unknown'}
                     </p>
                   </div>
                 </div>

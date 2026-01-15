@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +27,7 @@ interface MonthData {
 }
 
 export default function BudgetPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState("income");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -189,6 +191,25 @@ export default function BudgetPage() {
   const updateItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string, value: string) => {
     setter(prev => prev.map(item => item.id === id ? { ...item, value } : item));
   };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900">Budget</h2>
+          <p className="text-gray-500">Please login or create an account to manage your budget.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

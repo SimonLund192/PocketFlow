@@ -1,16 +1,75 @@
+'use client';
+
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BalanceTrendsChart } from "@/components/dashboard/BalanceTrendsChart";
 import { ExpenseBreakdownChart } from "@/components/dashboard/ExpenseBreakdownChart";
 import { Facebook, Twitter, Linkedin, Youtube } from "lucide-react";
 
-export default async function DashboardPage() {
-  const [stats, balanceTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
-    api.getDashboardStats(),
-    api.getBalanceTrends(),
-    api.getExpenseBreakdown(),
-    api.getBudgetLifetimeStats(),
-  ]);
+interface DashboardData {
+  stats: any;
+  balanceTrends: any[];
+  expenseBreakdown: any[];
+  lifetimeStats: any;
+}
+
+export default function DashboardPage() {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (authLoading) return;
+      
+      if (!isAuthenticated) {
+        // Show empty state for non-authenticated users
+        setData({
+          stats: {
+            net_income: 0,
+            total_savings: 0,
+            total_expenses: 0,
+            goals_achieved: 0,
+            period_change_percentage: 0,
+            last_month_net_income: 0,
+          },
+          balanceTrends: [],
+          expenseBreakdown: [],
+          lifetimeStats: {
+            total_income: 0,
+            total_shared_expenses: 0,
+            total_personal_expenses: 0,
+            total_shared_savings: 0,
+            remaining: 0,
+          },
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const [stats, balanceTrends, expenseBreakdown, lifetimeStats] = await Promise.all([
+          api.getDashboardStats(),
+          api.getBalanceTrends(),
+          api.getExpenseBreakdown(),
+          api.getBudgetLifetimeStats(),
+        ]);
+        setData({ stats, balanceTrends, expenseBreakdown, lifetimeStats });
+        setError(null);
+      } catch (err: any) {
+        console.error('Failed to fetch dashboard data:', err);
+        setError(err.message || 'Failed to load dashboard data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [isAuthenticated, authLoading]);
 
   const formatCurrency = (num: number) => {
     return new Intl.NumberFormat('da-DK', {
@@ -21,10 +80,36 @@ export default async function DashboardPage() {
     }).format(num);
   };
 
-  const formatPercentage = (num: number) => {
-    const sign = num >= 0 ? '+' : '';
-    return `${sign}${num.toFixed(2)}%`;
-  };
+  if (authLoading || isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-gray-500">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-red-500">Error: {error}</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold text-gray-900">Welcome to PocketFlow</h2>
+          <p className="text-gray-500">Please login or create an account to view your dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const { lifetimeStats, balanceTrends, expenseBreakdown } = data;
 
   return (
     <div className="space-y-6">
