@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, X, Trash2 } from "lucide-react";
+import { Plus, X, Trash2, GripVertical } from "lucide-react";
 import { api, Goal } from "@/lib/api";
 
 export default function GoalsPage() {
@@ -130,6 +130,71 @@ export default function GoalsPage() {
     }
   };
 
+  // Drag and drop state
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    // Set drag image
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newGoals = [...goals];
+    const [draggedGoal] = newGoals.splice(draggedIndex, 1);
+    newGoals.splice(dropIndex, 0, draggedGoal);
+    
+    setGoals(newGoals);
+    setDragOverIndex(null);
+    
+    // Update selected goal reference if needed
+    if (selectedGoal?.id === draggedGoal.id) {
+      setSelectedGoal(draggedGoal);
+    }
+    
+    // Save the new order to the backend
+    try {
+      const goalOrders = newGoals.map((goal, index) => ({
+        id: goal.id,
+        order: index
+      }));
+      await api.reorderGoals(goalOrders);
+    } catch (error) {
+      console.error("Failed to save goal order:", error);
+      // Optionally reload goals to revert to server state
+      loadGoals();
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -247,9 +312,22 @@ export default function GoalsPage() {
         {/* Left Sidebar - Goals List */}
         <div className="col-span-4 space-y-4">
           {goals.map((goal, index) => (
-            <div key={`goal-${goal.id}-${index}`}>
+            <div 
+              key={`goal-${goal.id}-${index}`}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, index)}
+              className={`transition-all ${
+                dragOverIndex === index && draggedIndex !== index
+                  ? 'transform scale-105 border-2 border-blue-500 rounded-lg'
+                  : ''
+              }`}
+            >
               <Card
-                className={`cursor-pointer transition-all ${
+                className={`cursor-move transition-all ${
                   selectedGoal?.id === goal.id
                     ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xl scale-105"
                     : "hover:shadow-lg"
@@ -258,6 +336,15 @@ export default function GoalsPage() {
               >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
+                  {/* Drag Handle */}
+                  <div className={`flex-shrink-0 cursor-move ${
+                    selectedGoal?.id === goal.id
+                      ? "text-white/70 hover:text-white"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}>
+                    <GripVertical className="w-5 h-5" />
+                  </div>
+
                   {/* Priority Badge */}
                   <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                     selectedGoal?.id === goal.id

@@ -205,6 +205,7 @@ class Goal(BaseModel):
     target: float
     percentage: float = 0.0
     color: str = "bg-green-500"
+    order: int = 0  # Order/priority of the goal (lower number = higher priority)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     model_config = {
@@ -217,7 +218,8 @@ class Goal(BaseModel):
                 "saved": 5000.0,
                 "target": 20000.0,
                 "percentage": 25.0,
-                "color": "bg-green-500"
+                "color": "bg-green-500",
+                "order": 0
             }
         }
     }
@@ -233,3 +235,8 @@ class GoalUpdate(BaseModel):
     saved: Optional[float] = None
     target: Optional[float] = None
     color: Optional[str] = None
+    order: Optional[int] = None
+
+class GoalOrderItem(BaseModel):
+    id: str
+    order: int

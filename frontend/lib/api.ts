@@ -154,6 +154,7 @@ export interface Goal {
   target: number;
   percentage: number;
   color: string;
+  order: number;
   created_at: string;
 }
 
@@ -169,6 +170,7 @@ export interface GoalUpdate {
   saved?: number;
   target?: number;
   color?: string;
+  order?: number;
 }
 
 export const api = {
@@ -379,6 +381,16 @@ export const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to delete goal');
+    return res.json();
+  },
+
+  async reorderGoals(goalOrders: Array<{ id: string; order: number }>): Promise<{ message: string }> {
+    const res = await fetch(`${API_URL}/api/goals/reorder`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(goalOrders),
+    });
+    if (!res.ok) throw new Error('Failed to reorder goals');
     return res.json();
   },
 

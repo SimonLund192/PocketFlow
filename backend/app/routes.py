@@ -6,7 +6,7 @@ from app.models import (
     ExpenseBreakdown, BudgetExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats, MonthlyStats,
     User, UserCreate, UserLogin, Token, UserResponse,
     Category, CategoryCreate, CategoryUpdate,
-    Goal, GoalCreate, GoalUpdate
+    Goal, GoalCreate, GoalUpdate, GoalOrderItem
 )
 from app.database import get_database
 from app.auth import (
@@ -714,7 +714,7 @@ async def get_goals(current_user: User = Depends(get_current_user)):
     """Get all goals for the current user"""
     db = get_database()
     
-    goals_cursor = db.goals.find({"user_id": str(current_user.id)})
+    goals_cursor = db.goals.find({"user_id": str(current_user.id)}).sort("order", 1)
     goals = await goals_cursor.to_list(length=None)
     
     result = [
@@ -726,6 +726,7 @@ async def get_goals(current_user: User = Depends(get_current_user)):
             target=goal["target"],
             percentage=goal["percentage"],
             color=goal.get("color", "bg-green-500"),
+            order=goal.get("order", 0),
             created_at=goal["created_at"]
         )
         for goal in goals
@@ -738,6 +739,10 @@ async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_cu
     """Create a new goal"""
     db = get_database()
     
+    # Get the highest order number for existing goals
+    existing_goals = await db.goals.find({"user_id": str(current_user.id)}).sort("order", -1).limit(1).to_list(1)
+    next_order = (existing_goals[0].get("order", 0) + 1) if existing_goals else 0
+    
     # Calculate percentage
     percentage = (goal_data.saved / goal_data.target * 100) if goal_data.target > 0 else 0
     
@@ -748,6 +753,7 @@ async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_cu
         "target": goal_data.target,
         "percentage": round(percentage, 2),
         "color": goal_data.color,
+        "order": next_order,
         "created_at": datetime.utcnow()
     }
     
@@ -762,6 +768,7 @@ async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_cu
         target=new_goal["target"],
         percentage=new_goal["percentage"],
         color=new_goal.get("color", "bg-green-500"),
+        order=new_goal.get("order", 0),
         created_at=new_goal["created_at"]
     )
 
@@ -792,6 +799,8 @@ async def update_goal(goal_id: str, goal_data: GoalUpdate, current_user: User = 
         update_dict["target"] = goal_data.target
     if goal_data.color is not None:
         update_dict["color"] = goal_data.color
+    if goal_data.order is not None:
+        update_dict["order"] = goal_data.order
     
     # Recalculate percentage if saved or target changed
     if goal_data.saved is not None or goal_data.target is not None:
@@ -815,6 +824,7 @@ async def update_goal(goal_id: str, goal_data: GoalUpdate, current_user: User = 
         target=updated_goal["target"],
         percentage=updated_goal["percentage"],
         color=updated_goal.get("color", "bg-green-500"),
+        order=updated_goal.get("order", 0),
         created_at=updated_goal["created_at"]
     )
 
@@ -847,6 +857,27 @@ async def delete_goal(goal_id: str, current_user: User = Depends(get_current_use
     await db.goals.delete_one({"_id": goal_object_id})
     
     return {"message": "Goal deleted successfully"}
+
+@router.patch("/goals/reorder")
+async def reorder_goals(goal_orders: List[GoalOrderItem], current_user: User = Depends(get_current_user)):
+    """Update the order of multiple goals at once"""
+    db = get_database()
+    
+    # Update each goal's order
+    for item in goal_orders:
+        try:
+            goal_object_id = ObjectId(item.id)
+            
+            # Verify goal belongs to user and update order
+            await db.goals.update_one(
+                {"_id": goal_object_id, "user_id": str(current_user.id)},
+                {"$set": {"order": item.order}}
+            )
+        except Exception as e:
+            print(f"Failed to update goal {item.id}: {str(e)}")
+            continue
+    
+    return {"message": "Goals reordered successfully"}
 
 @router.delete("/admin/clear/goals")
 async def clear_goals():
