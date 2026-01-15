@@ -75,12 +75,20 @@ export default function DashboardPage() {
         ]);
         setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats, monthlyStats });
         
-        // Calculate goals achieved
-        const goalsAchieved = goals.filter(goal => {
-          const saved = Math.min(lifetimeStats.total_shared_savings, goal.target);
-          const percentage = (saved / goal.target) * 100;
-          return percentage >= 100;
-        }).length;
+        // Calculate goals achieved using hierarchical logic
+        let remainingSavings = lifetimeStats.total_shared_savings;
+        let goalsAchieved = 0;
+        
+        for (const goal of goals) {
+          // Check if we have enough savings to complete this goal
+          if (remainingSavings >= goal.target) {
+            goalsAchieved++;
+            remainingSavings -= goal.target;
+          } else {
+            // If we can't complete this goal, we can't complete any after it
+            break;
+          }
+        }
         
         setData({ 
           stats: { ...stats, goals_achieved: goalsAchieved }, 
