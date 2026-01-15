@@ -130,6 +130,14 @@ class BudgetLifetimeStats(BaseModel):
     total_shared_savings: float
     remaining: float
 
+class MonthlyStats(BaseModel):
+    current_income: float
+    current_expenses: float
+    current_savings: float
+    previous_income: float
+    previous_expenses: float
+    previous_savings: float
+
 # User Models
 class User(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
@@ -187,3 +195,41 @@ class CategoryUpdate(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     type: Optional[str] = None
+
+# Goal Models
+class Goal(BaseModel):
+    id: Optional[str] = Field(None, alias="_id")
+    user_id: str  # User who owns this goal
+    name: str
+    saved: float = 0.0
+    target: float
+    percentage: float = 0.0
+    color: str = "bg-green-500"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    model_config = {
+        "populate_by_name": True,
+        "json_schema_extra": {
+            "example": {
+                "id": "507f1f77bcf86cd799439011",
+                "user_id": "user123",
+                "name": "Buy a car",
+                "saved": 5000.0,
+                "target": 20000.0,
+                "percentage": 25.0,
+                "color": "bg-green-500"
+            }
+        }
+    }
+
+class GoalCreate(BaseModel):
+    name: str
+    target: float
+    saved: Optional[float] = 0.0
+    color: Optional[str] = "bg-green-500"
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    saved: Optional[float] = None
+    target: Optional[float] = None
+    color: Optional[str] = None

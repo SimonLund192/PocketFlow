@@ -90,6 +90,15 @@ export interface BudgetLifetimeStats {
   remaining: number;
 }
 
+export interface MonthlyStats {
+  current_income: number;
+  current_expenses: number;
+  current_savings: number;
+  previous_income: number;
+  previous_expenses: number;
+  previous_savings: number;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -134,6 +143,31 @@ export interface CategoryUpdate {
   icon?: string;
   color?: string;
   type?: 'income' | 'expense';
+}
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  name: string;
+  saved: number;
+  target: number;
+  percentage: number;
+  color: string;
+  created_at: string;
+}
+
+export interface GoalCreate {
+  name: string;
+  target: number;
+  saved?: number;
+  color?: string;
+}
+
+export interface GoalUpdate {
+  name?: string;
+  saved?: number;
+  target?: number;
+  color?: string;
 }
 
 export const api = {
@@ -255,6 +289,15 @@ export const api = {
     return res.json();
   },
 
+  async getMonthlyStats(): Promise<MonthlyStats> {
+    const res = await fetch(`${API_URL}/api/budget/monthly/stats`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch monthly stats');
+    return res.json();
+  },
+
   // Category endpoints
   async getCategories(): Promise<Category[]> {
     const res = await fetch(`${API_URL}/api/categories`, {
@@ -294,6 +337,44 @@ export const api = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to delete category');
+    return res.json();
+  },
+
+  // Goal endpoints
+  async getGoals(): Promise<Goal[]> {
+    const res = await fetch(`${API_URL}/api/goals`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch goals');
+    return res.json();
+  },
+
+  async createGoal(data: GoalCreate): Promise<Goal> {
+    const res = await fetch(`${API_URL}/api/goals`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create goal');
+    return res.json();
+  },
+
+  async updateGoal(id: string, data: GoalUpdate): Promise<Goal> {
+    const res = await fetch(`${API_URL}/api/goals/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update goal');
+    return res.json();
+  },
+
+  async deleteGoal(id: string): Promise<{ message: string }> {
+    const res = await fetch(`${API_URL}/api/goals/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete goal');
     return res.json();
   },
 

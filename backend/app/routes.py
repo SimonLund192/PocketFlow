@@ -3,9 +3,10 @@ from typing import List
 from datetime import datetime, timedelta
 from app.models import (
     Transaction, TransactionCreate, DashboardStats, BalanceTrend, SavingsTrend,
-    ExpenseBreakdown, BudgetExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats,
+    ExpenseBreakdown, BudgetExpenseBreakdown, TransactionType, Budget, BudgetCreate, BudgetLifetimeStats, MonthlyStats,
     User, UserCreate, UserLogin, Token, UserResponse,
-    Category, CategoryCreate, CategoryUpdate
+    Category, CategoryCreate, CategoryUpdate,
+    Goal, GoalCreate, GoalUpdate
 )
 from app.database import get_database
 from app.auth import (
@@ -508,6 +509,69 @@ async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_cur
         remaining=remaining
     )
 
+@router.get("/budget/monthly/stats", response_model=MonthlyStats)
+async def get_monthly_budget_stats(current_user: UserResponse = Depends(get_current_user)):
+    """Get current and previous month budget statistics for comparison"""
+    db = get_database()
+    from datetime import datetime
+    
+    # Get current month (YYYY-MM format)
+    now = datetime.utcnow()
+    current_month = f"{now.year}-{now.month:02d}"
+    
+    # Get previous month
+    if now.month == 1:
+        prev_month = f"{now.year - 1}-12"
+    else:
+        prev_month = f"{now.year}-{now.month - 1:02d}"
+    
+    # Function to calculate stats for a month
+    async def get_month_stats(month: str):
+        budget = await db.budgets.find_one({"user_id": current_user.id, "month": month})
+        
+        if not budget:
+            return 0.0, 0.0, 0.0
+        
+        # Calculate income
+        income = 0.0
+        for item in budget.get("income_user1", []):
+            income += item.get("value", 0.0)
+        for item in budget.get("income_user2", []):
+            income += item.get("value", 0.0)
+        
+        # Calculate expenses
+        expenses = 0.0
+        for item in budget.get("shared_expenses", []):
+            expenses += item.get("value", 0.0)
+        for item in budget.get("personal_user1", []):
+            expenses += item.get("value", 0.0)
+        for item in budget.get("personal_user2", []):
+            expenses += item.get("value", 0.0)
+        
+        # Calculate savings
+        savings = 0.0
+        for item in budget.get("shared_savings", []):
+            savings += item.get("value", 0.0)
+        for item in budget.get("personal_savings_user1", []):
+            savings += item.get("value", 0.0)
+        for item in budget.get("personal_savings_user2", []):
+            savings += item.get("value", 0.0)
+        
+        return income, expenses, savings
+    
+    # Get current and previous month stats
+    current_income, current_expenses, current_savings = await get_month_stats(current_month)
+    previous_income, previous_expenses, previous_savings = await get_month_stats(prev_month)
+    
+    return MonthlyStats(
+        current_income=current_income,
+        current_expenses=current_expenses,
+        current_savings=current_savings,
+        previous_income=previous_income,
+        previous_expenses=previous_expenses,
+        previous_savings=previous_savings
+    )
+
 # Admin endpoints for clearing data
 @router.delete("/admin/clear/transactions")
 async def clear_transactions():
@@ -628,6 +692,157 @@ async def delete_category(category_id: str, current_user: User = Depends(get_cur
     await db.categories.delete_one({"_id": ObjectId(category_id)})
     
     return {"message": "Category deleted successfully"}
+
+# Goal endpoints
+@router.get("/goals", response_model=List[Goal], response_model_by_alias=False)
+async def get_goals(current_user: User = Depends(get_current_user)):
+    """Get all goals for the current user"""
+    db = get_database()
+    
+    goals_cursor = db.goals.find({"user_id": str(current_user.id)})
+    goals = await goals_cursor.to_list(length=None)
+    
+    result = [
+        Goal(
+            id=str(goal["_id"]),
+            user_id=goal["user_id"],
+            name=goal["name"],
+            saved=goal["saved"],
+            target=goal["target"],
+            percentage=goal["percentage"],
+            color=goal.get("color", "bg-green-500"),
+            created_at=goal["created_at"]
+        )
+        for goal in goals
+    ]
+    
+    return result
+
+@router.post("/goals", response_model=Goal, response_model_by_alias=False, status_code=status.HTTP_201_CREATED)
+async def create_goal(goal_data: GoalCreate, current_user: User = Depends(get_current_user)):
+    """Create a new goal"""
+    db = get_database()
+    
+    # Calculate percentage
+    percentage = (goal_data.saved / goal_data.target * 100) if goal_data.target > 0 else 0
+    
+    goal_dict = {
+        "user_id": str(current_user.id),
+        "name": goal_data.name,
+        "saved": goal_data.saved,
+        "target": goal_data.target,
+        "percentage": round(percentage, 2),
+        "color": goal_data.color,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.goals.insert_one(goal_dict)
+    new_goal = await db.goals.find_one({"_id": result.inserted_id})
+    
+    return Goal(
+        id=str(new_goal["_id"]),
+        user_id=new_goal["user_id"],
+        name=new_goal["name"],
+        saved=new_goal["saved"],
+        target=new_goal["target"],
+        percentage=new_goal["percentage"],
+        color=new_goal.get("color", "bg-green-500"),
+        created_at=new_goal["created_at"]
+    )
+
+@router.put("/goals/{goal_id}", response_model=Goal, response_model_by_alias=False)
+async def update_goal(goal_id: str, goal_data: GoalUpdate, current_user: User = Depends(get_current_user)):
+    """Update an existing goal"""
+    db = get_database()
+    
+    # Check if goal exists and belongs to user
+    existing_goal = await db.goals.find_one({
+        "_id": ObjectId(goal_id),
+        "user_id": str(current_user.id)
+    })
+    
+    if not existing_goal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Goal not found"
+        )
+    
+    # Build update dict with only provided fields
+    update_dict = {}
+    if goal_data.name is not None:
+        update_dict["name"] = goal_data.name
+    if goal_data.saved is not None:
+        update_dict["saved"] = goal_data.saved
+    if goal_data.target is not None:
+        update_dict["target"] = goal_data.target
+    if goal_data.color is not None:
+        update_dict["color"] = goal_data.color
+    
+    # Recalculate percentage if saved or target changed
+    if goal_data.saved is not None or goal_data.target is not None:
+        saved = goal_data.saved if goal_data.saved is not None else existing_goal["saved"]
+        target = goal_data.target if goal_data.target is not None else existing_goal["target"]
+        update_dict["percentage"] = round((saved / target * 100) if target > 0 else 0, 2)
+    
+    if update_dict:
+        await db.goals.update_one(
+            {"_id": ObjectId(goal_id)},
+            {"$set": update_dict}
+        )
+    
+    updated_goal = await db.goals.find_one({"_id": ObjectId(goal_id)})
+    
+    return Goal(
+        id=str(updated_goal["_id"]),
+        user_id=updated_goal["user_id"],
+        name=updated_goal["name"],
+        saved=updated_goal["saved"],
+        target=updated_goal["target"],
+        percentage=updated_goal["percentage"],
+        color=updated_goal.get("color", "bg-green-500"),
+        created_at=updated_goal["created_at"]
+    )
+
+@router.delete("/goals/{goal_id}")
+async def delete_goal(goal_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a goal"""
+    db = get_database()
+    
+    # Validate ObjectId format
+    try:
+        goal_object_id = ObjectId(goal_id)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid goal ID format"
+        )
+    
+    # Check if goal exists and belongs to user
+    existing_goal = await db.goals.find_one({
+        "_id": goal_object_id,
+        "user_id": str(current_user.id)
+    })
+    
+    if not existing_goal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Goal not found"
+        )
+    
+    await db.goals.delete_one({"_id": goal_object_id})
+    
+    return {"message": "Goal deleted successfully"}
+
+@router.delete("/admin/clear/goals")
+async def clear_goals():
+    """Clear all goals from the database"""
+    db = get_database()
+    
+    result = await db.goals.delete_many({})
+    return {
+        "message": "All goals cleared successfully",
+        "deleted_count": result.deleted_count
+    }
 
 @router.delete("/admin/clear/budgets")
 async def clear_budgets():
