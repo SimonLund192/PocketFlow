@@ -22,6 +22,7 @@ pytest
 
 Notes:
 - Current smoke tests only hit `/` and `/health` and don’t require MongoDB.
+- User-scoped API endpoints require `X-User-Id` header (dev-only contract).
 
 ## Frontend (Jest + React Testing Library)
 
@@ -50,3 +51,4 @@ npm run test:ci
 
 Notes:
 - The initial RTL smoke test is intentionally tiny and does not import Next.js pages (to avoid provider/fetch coupling).
+- The API client reads the dev user id from `localStorage['selected_user_id']` and sends it as `X-User-Id`.

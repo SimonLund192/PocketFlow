@@ -34,6 +34,7 @@ class TransactionCategory(str, Enum):
 
 class Transaction(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
+    user_id: Optional[str] = None
     type: TransactionType
     category: TransactionCategory
     amount: float

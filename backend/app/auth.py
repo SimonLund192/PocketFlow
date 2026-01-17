@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from .models import TokenData, UserResponse
 from .database import get_database
@@ -65,3 +65,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
         full_name=user["full_name"],
         created_at=user["created_at"]
     )
+
+
+def get_current_user_id(x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")) -> str:
+    """Dev-only user context contract.
+
+    Until we enforce real auth, every user-scoped request must provide an explicit
+    user identifier via the `X-User-Id` header.
+
+    We treat missing/blank user id as a client error (400).
+    """
+
+    if x_user_id is None or not x_user_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required X-User-Id header",
+        )
+
+    return x_user_id.strip()

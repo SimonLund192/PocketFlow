@@ -1,5 +1,25 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Dev-only user context contract:
+// The backend requires an explicit user identifier via `X-User-Id` on all
+// user-scoped endpoints (until real auth is enforced end-to-end).
+const USER_ID_STORAGE_KEY = 'selected_user_id';
+
+export const getSelectedUserId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(USER_ID_STORAGE_KEY);
+};
+
+export const setSelectedUserId = (userId: string) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(USER_ID_STORAGE_KEY, userId);
+};
+
+const getUserContextHeaders = (): HeadersInit => {
+  const userId = getSelectedUserId();
+  return userId ? { 'X-User-Id': userId } : {};
+};
+
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
@@ -12,6 +32,7 @@ const getAuthHeaders = (): HeadersInit => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
+  Object.assign(headers, getUserContextHeaders());
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -219,7 +240,7 @@ export const api = {
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store', headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to fetch dashboard stats');
     return res.json();
   },
@@ -243,7 +264,7 @@ export const api = {
   },
 
   async getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, { cache: 'no-store', headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to fetch expense breakdown');
     return res.json();
   },
@@ -258,7 +279,7 @@ export const api = {
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    const res = await fetch(`${API_URL}/api/transactions`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/transactions`, { cache: 'no-store', headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Failed to fetch transactions');
     return res.json();
   },
@@ -398,6 +419,7 @@ export const api = {
   async clearTransactions(): Promise<{ message: string; deleted_count: number }> {
     const res = await fetch(`${API_URL}/api/admin/clear/transactions`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to clear transactions');
     return res.json();
@@ -406,6 +428,7 @@ export const api = {
   async clearBudgets(): Promise<{ message: string; deleted_count: number }> {
     const res = await fetch(`${API_URL}/api/admin/clear/budgets`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to clear budgets');
     return res.json();
@@ -414,6 +437,7 @@ export const api = {
   async clearAllData(): Promise<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }> {
     const res = await fetch(`${API_URL}/api/admin/clear/all`, {
       method: 'DELETE',
+      headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to clear all data');
     return res.json();
