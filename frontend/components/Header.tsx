@@ -20,7 +20,6 @@ export function Header() {
     if (pathname === '/') return 'Dashboard';
     if (pathname === '/budget') return 'Budget';
     if (pathname === '/goals') return 'Goals';
-    if (pathname === '/analytics') return 'Analytics';
     if (pathname === '/settings') return 'Settings';
     return 'Dashboard';
   };

@@ -1,16 +1,14 @@
 "use client";
 
-import { Home, Target, Calculator, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
+import { Home, Target, Calculator, PieChart, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DevUserSwitcher } from "@/components/DevUserSwitcher";
-import { AnalyticsIcon } from "@/components/icons/AnalyticsIcon";
 
 const navItems = [
   { icon: Home, label: "Dashboard", href: "/" },
   { icon: Calculator, label: "Budget", href: "/budget" },
   { icon: Target, label: "Goals", href: "/goals" },
-  { icon: AnalyticsIcon, label: "Analytics", href: "/analytics" },
+  { icon: PieChart, label: "Analytics", href: "/analytics" },
   { icon: LinkIcon, label: "Connections", href: "/connections" },
   { icon: Settings, label: "Settings", href: "/settings" },
   { icon: HelpCircle, label: "Help", href: "/help" },
@@ -56,8 +54,7 @@ export function Sidebar() {
       </nav>
 
       {/* User Avatar */}
-      <div className="mt-auto flex flex-col items-center gap-2">
-        <DevUserSwitcher />
+      <div className="mt-auto">
         <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
           <span className="text-[#4E4EFF] font-semibold text-sm">U</span>
         </div>

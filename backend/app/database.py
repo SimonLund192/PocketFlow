@@ -8,10 +8,7 @@ class Database:
 db = Database()
 
 async def connect_to_mongo():
-    # In tests we allow overriding the Mongo URL without affecting dev/prod.
-    mongodb_url = os.getenv("MONGODB_URL_TEST") or os.getenv(
-        "MONGODB_URL", "mongodb://admin:admin123@mongodb:27017"
-    )
+    mongodb_url = os.getenv("MONGODB_URL", "mongodb://admin:admin123@mongodb:27017")
     db.client = AsyncIOMotorClient(mongodb_url)
     print("Connected to MongoDB")
 
@@ -22,6 +19,4 @@ async def close_mongo_connection():
 
 def get_database():
     database_name = os.getenv("DATABASE_NAME", "pocketflow")
-    if db.client is None:
-        raise RuntimeError("Database client is not initialized. Did you forget to connect_to_mongo()?")
     return db.client[database_name]

@@ -1,46 +1,50 @@
-# AI Context: Budget App
+# AI Context: Pocketflow
 
-This app helps people understand and control their money with clarity and trust.
-The product should feel calm and reliable. The code should be predictable and testable.
+Pocketflow helps users understand and control their finances with clarity and trust.
+The product should feel calm, predictable, and reliable.
+The code should be easy to reason about and safe to extend.
 
 ---
 
 ## Product Intent
 
-- Help users track transactions, budgets, goals, and trends.
-- Make the dashboard understandable at a glance.
-- Avoid surprise behavior. Changes should be visible and explainable.
-- Prefer correctness over flashy complexity.
+* Enable users to track transactions, budgets, goals, and trends.
+* Make the dashboard understandable at a glance.
+* Avoid surprise behavior; changes should be visible and explainable.
+* Favor correctness and trust over feature novelty.
 
 ---
 
 ## UX Intent
 
-- Consistency matters more than novelty.
-- Use existing layout patterns (Sidebar/layout components) and shadcn/ui components.
-- Keep pages focused: clear headings, clear primary actions, clear empty states.
-- Loading and error states should be graceful and consistent.
+* Consistency matters more than novelty.
+* Reuse existing layout patterns and shadcn/ui components.
+* Pages should be focused, with clear primary actions and clear empty states.
+* Loading and error states should be graceful and consistent across the app.
 
 ---
 
 ## Engineering Intent
 
-- Financial logic must be correct and stable:
-  - be consistent about currency formatting and rounding
-  - avoid ambiguous calculations and duplicated business rules
-- Centralize API access in `frontend/lib/api.ts`.
-- Prefer small refactors that improve clarity rather than large rewrites.
-- Add tests when changing logic to prevent regressions.
+* Financial logic must be correct and stable:
+
+  * consistent currency representation and rounding
+  * no duplicated or ambiguous business rules
+* User trust includes **strict isolation between users**.
+* API access is centralized in `frontend/lib/api.ts`.
+* Prefer small, incremental improvements over large rewrites.
+* Tests are part of the feature, not an afterthought.
 
 ---
 
 ## Long-Term Direction
 
-The codebase should stay easy to extend:
-- recurring transactions
-- categories/tags
-- budget periods
-- export/import
-- analytics and forecasting
+Pocketflow should remain easy to extend without becoming complex:
 
-Build foundations that scale without making the system complicated today.
+* recurring transactions
+* categories and tagging
+* budget periods
+* import/export
+* analytics and forecasting
+
+Build foundations that scale in capability without scaling in complexity.

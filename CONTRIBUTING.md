@@ -1,87 +1,116 @@
-# Contributing to Budget App
+# Contributing to Pocketflow
 
-This repository contains a Next.js 14 (App Router) frontend and a FastAPI + MongoDB backend.
-The goal is a clean, predictable codebase where financial behavior is test-backed and easy to extend.
+Pocketflow is a budget and finance application built with a Next.js 14 frontend and a FastAPI backend.
+The codebase prioritizes clarity, correctness, and strict user data isolation.
 
 ---
 
 ## Repository Structure
 
 ### Frontend (Next.js 14 App Router)
-- `frontend/app/` contains route pages:
-  - `app/page.tsx` (Dashboard)
-  - `app/transactions/page.tsx`
-  - `app/budgets/page.tsx`
-  - `app/goals/page.tsx`
-- `frontend/components/` contains reusable components:
-  - `components/ui/` shadcn/ui components
-  - `components/layout/` layout components (Sidebar, etc.)
-  - `components/dashboard/` dashboard-specific components
-- `frontend/lib/api.ts` contains API client functions used by pages/components
-- `frontend/lib/utils.ts` contains general utilities
+
+* `frontend/app/` – Route-based pages (Server Components by default)
+* `frontend/components/` – Reusable components
+
+  * `components/ui/` – shadcn/ui components
+  * `components/layout/` – Shared layout (Sidebar, shell)
+  * `components/dashboard/` – Dashboard-specific components
+* `frontend/contexts/` – React contexts (e.g. user selection)
+* `frontend/lib/api.ts` – Centralized API client (single source of truth)
+* `frontend/__tests__/` – Jest + React Testing Library tests
 
 ### Backend (FastAPI + MongoDB)
-- `backend/app/main.py` FastAPI app entry
-- `backend/app/routes.py` API endpoints
-- `backend/app/models.py` Pydantic models
-- `backend/app/database.py` MongoDB connection
-- `backend/app/seed_data.py` seed script
+
+* `backend/app/main.py` – FastAPI app entrypoint
+* `backend/app/routes.py` – Router aggregator
+* `backend/app/routes/` – Per-feature routers (transactions, budgets, goals, dashboard, users)
+* `backend/app/models.py` – Pydantic models
+* `backend/app/database.py` – MongoDB helpers
+* `backend/app/auth.py` – User context dependency (dev-mode today, auth-ready)
+* `backend/app/seed_data.py` – Development seed data
+* `backend/tests/` – pytest integration tests
 
 ---
 
 ## Development Principles
 
 ### Reuse-first development
-Before adding new code, check for an existing:
-- component
-- utility function
-- API function
-- backend route pattern
-and extend it rather than duplicating behavior.
 
-### Keep changes small
-Prefer small, focused PRs:
-- One feature or fix per branch
-- Avoid unrelated refactors
-- Refactor only where you are already making changes
+Before adding new code, check for existing:
 
-### UI consistency
-- Reuse existing layout components in `frontend/components/layout`.
-- Use shadcn/ui components from `frontend/components/ui`.
-- Keep styling consistent with existing pages and dashboard components.
+* components
+* utilities
+* API client functions
+* backend route or model patterns
+
+Extend existing code whenever possible instead of duplicating behavior.
+
+### Keep changes small and focused
+
+* One feature or fix per branch.
+* Avoid unrelated refactors.
+* Cleanup is welcome, but only within the scope of the change.
+
+---
+
+## User data ownership (critical)
+
+All domain data in Pocketflow is scoped to a user.
+
+* Backend endpoints must enforce user scoping via `get_user_context()`.
+* Frontend requests must include the selected user context automatically via `frontend/lib/api.ts`.
+* Cross-user data access is a correctness bug and must be covered by tests.
 
 ---
 
 ## API Conventions
 
-- RESTful endpoints (GET/POST/PUT/DELETE)
-- JSON request/response
-- Path parameters: `/api/resource/{id}`
-- Query parameters for filtering/ranges
-- Frontend calls backend through `frontend/lib/api.ts` (single source of truth)
+* RESTful endpoints under `/api/*`
+* JSON request and response bodies
+* Path parameters for identifiers (`/api/resource/{id}`)
+* Query parameters for filtering and ranges
+* Frontend communicates with backend exclusively via `frontend/lib/api.ts`
 
-Backend base URL (local dev): `http://localhost:8000`
+Local backend base URL: `http://localhost:8000`
 
 ---
 
-## Testing (going forward)
+## Testing
 
-There is currently no test setup. New work should introduce tests along with the feature.
+This project uses fast, lightweight tests:
 
-Recommended:
-- Frontend: Jest + React Testing Library
-- Backend: pytest
+### Backend
 
-When you change behavior, add tests to lock it in.
-When you fix a bug, add a regression test.
+* Framework: pytest + pytest-asyncio
+* Style: async integration tests using an ASGI client
+
+Run:
+
+```bash
+docker compose run --rm backend pytest
+```
+
+### Frontend
+
+* Framework: Jest + React Testing Library
+* Tests live in `frontend/__tests__/`
+
+Run:
+
+```bash
+npm test
+```
+
+When adding features or fixing bugs, update or add tests to lock in behavior.
 
 ---
 
 ## Code Quality Checklist
 
 Before committing:
-- Remove unused imports and dead code in touched files
-- Keep naming consistent and descriptive
-- Prefer explicit code over clever abstractions
-- Add comments only where they add clarity
-- Ensure errors are handled explicitly and safely
+
+* Remove unused imports and dead code in touched files
+* Keep naming consistent and descriptive
+* Prefer explicit, readable code over clever abstractions
+* Handle errors explicitly and safely
+* Add comments only where they add clarity

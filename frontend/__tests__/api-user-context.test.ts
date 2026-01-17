@@ -1,42 +1,49 @@
-import { getSelectedUserId, setSelectedUserId } from "../lib/api";
+import { getSelectedUserId, setSelectedUserId, api } from '../lib/api';
 
-describe("API user context contract", () => {
-  beforeEach(() => {
-    // jsdom localStorage is available in Jest env
-    localStorage.clear();
-    jest.restoreAllMocks();
-  });
+let fetchMock: jest.Mock;
 
-  test("api attaches X-User-Id header when selected", async () => {
-    setSelectedUserId("user-123");
+function mockJsonResponse(status: number, body: unknown) {
+	return {
+		ok: status >= 200 && status < 300,
+		status,
+		json: async () => body,
+	} as Response;
+}
 
-    const fetchSpy = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      json: async () => ({
-        net_income: 0,
-        total_savings: 0,
-        total_expenses: 0,
-        goals_achieved: 0,
-        period_change_percentage: 0,
-        last_month_net_income: 0,
-      }),
-    } as any);
-    (globalThis as any).fetch = fetchSpy;
+describe('user context (dev mode)', () => {
+	beforeEach(() => {
+		fetchMock = jest.fn();
+		(global as any).fetch = fetchMock;
+		localStorage.clear();
+	});
 
-    const { api } = await import("../lib/api");
+	test('setSelectedUserId stores and clears selected user', () => {
+		expect(getSelectedUserId()).toBeNull();
 
-    await api.getDashboardStats();
+		setSelectedUserId('u-123');
+		expect(getSelectedUserId()).toBe('u-123');
+		expect(localStorage.getItem('selected_user_id')).toBe('u-123');
 
-    expect(fetchSpy).toHaveBeenCalled();
-    const [, init] = fetchSpy.mock.calls[0] as [unknown, RequestInit];
-    const headers = init.headers as Record<string, string>;
-    expect(headers["X-User-Id"]).toBe("user-123");
-  });
+		setSelectedUserId(null);
+		expect(getSelectedUserId()).toBeNull();
+		expect(localStorage.getItem('selected_user_id')).toBeNull();
+	});
 
-  test("getSelectedUserId reads from localStorage", () => {
-    localStorage.setItem("selected_user_id", "abc");
-    expect(getSelectedUserId()).toBe("abc");
-  });
+	test('api.getTransactions attaches X-User-Id when selected', async () => {
+		setSelectedUserId('tx-user');
+
+		fetchMock.mockResolvedValueOnce(mockJsonResponse(200, []));
+		await api.getTransactions();
+
+		const [, init] = fetchMock.mock.calls[0];
+		expect(init.headers['X-User-Id']).toBe('tx-user');
+	});
+
+	test('api.getTransactions does not attach X-User-Id when none selected', async () => {
+		fetchMock.mockResolvedValueOnce(mockJsonResponse(200, []));
+		await api.getTransactions();
+
+		const [, init] = fetchMock.mock.calls[0];
+		expect(init.headers['X-User-Id']).toBeUndefined();
+	});
 });

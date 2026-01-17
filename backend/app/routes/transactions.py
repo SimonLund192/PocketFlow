@@ -4,7 +4,7 @@ from typing import List
 from bson import ObjectId
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from app.auth import get_current_user_id
+from app.auth import UserContext, get_user_context
 from app.database import get_database
 from app.models import Transaction, TransactionCreate
 
@@ -23,22 +23,24 @@ def transaction_helper(transaction) -> dict:
 
 
 @router.get("/transactions", response_model=List[Transaction])
-async def get_transactions(user_id: str = Depends(get_current_user_id)):
+async def get_transactions(ctx: UserContext = Depends(get_user_context)):
     db = get_database()
     transactions = []
-    async for transaction in db.transactions.find({"user_id": user_id}).sort("date", -1):
+    async for transaction in db.transactions.find({"user_id": ctx.user_id}).sort(
+        "date", -1
+    ):
         transactions.append(transaction_helper(transaction))
     return transactions
 
 
 @router.post("/transactions", response_model=Transaction, status_code=status.HTTP_201_CREATED)
 async def create_transaction(
-    transaction: TransactionCreate, user_id: str = Depends(get_current_user_id)
+    transaction: TransactionCreate, ctx: UserContext = Depends(get_user_context)
 ):
     db = get_database()
 
     transaction_dict = transaction.model_dump()
-    transaction_dict["user_id"] = user_id
+    transaction_dict["user_id"] = ctx.user_id
     if transaction_dict["date"] is None:
         transaction_dict["date"] = datetime.utcnow()
 
@@ -50,7 +52,7 @@ async def create_transaction(
 
 @router.delete("/transactions/{transaction_id}")
 async def delete_transaction(
-    transaction_id: str, user_id: str = Depends(get_current_user_id)
+    transaction_id: str, ctx: UserContext = Depends(get_user_context)
 ):
     db = get_database()
 
@@ -61,7 +63,7 @@ async def delete_transaction(
         )
 
     result = await db.transactions.delete_one(
-        {"_id": ObjectId(transaction_id), "user_id": user_id}
+        {"_id": ObjectId(transaction_id), "user_id": ctx.user_id}
     )
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Transaction not found")

@@ -3,7 +3,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends
 
-from app.auth import get_current_user_id
+from app.auth import UserContext, get_user_context
 from app.database import get_database
 from app.models import DashboardStats, ExpenseBreakdown
 
@@ -18,14 +18,14 @@ async def _get_user_transactions(db, user_id: str):
 
 
 @router.get("/stats", response_model=DashboardStats)
-async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
+async def get_dashboard_stats(ctx: UserContext = Depends(get_user_context)):
     db = get_database()
 
     now = datetime.utcnow()
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     start_of_last_month = (start_of_month - timedelta(days=1)).replace(day=1)
 
-    all_transactions = await _get_user_transactions(db, user_id)
+    all_transactions = await _get_user_transactions(db, ctx.user_id)
 
     this_month_transactions = [t for t in all_transactions if t["date"] >= start_of_month]
 
@@ -87,7 +87,7 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+async def get_expense_breakdown(ctx: UserContext = Depends(get_user_context)):
     db = get_database()
 
     now = datetime.utcnow()
@@ -95,7 +95,11 @@ async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
 
     expenses = []
     async for transaction in db.transactions.find(
-        {"user_id": user_id, "type": "expense", "date": {"$gte": start_of_month}}
+        {
+            "user_id": ctx.user_id,
+            "type": "expense",
+            "date": {"$gte": start_of_month},
+        }
     ):
         expenses.append(transaction)
 
