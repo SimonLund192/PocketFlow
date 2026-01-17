@@ -504,15 +504,15 @@ def budget_helper(budget) -> dict:
     }
 
 @router.get("/budget/{month}", response_model=Budget)
-async def get_budget(month: str, current_user: UserResponse = Depends(get_current_user)):
+async def get_budget(month: str, user_id: str = Depends(get_current_user_id)):
     """Get budget for a specific month (format: YYYY-MM)"""
     db = get_database()
     
-    budget = await db.budgets.find_one({"month": month, "user_id": current_user.id})
+    budget = await db.budgets.find_one({"month": month, "user_id": user_id})
     if not budget:
         # Return empty budget structure if not found
         return {
-            "user_id": current_user.id,
+            "user_id": user_id,
             "month": month,
             "income_user1": [],
             "income_user2": [],
@@ -527,26 +527,26 @@ async def get_budget(month: str, current_user: UserResponse = Depends(get_curren
     return budget_helper(budget)
 
 @router.post("/budget/{month}", response_model=Budget)
-async def save_budget(month: str, budget_data: BudgetCreate, current_user: UserResponse = Depends(get_current_user)):
+async def save_budget(month: str, budget_data: BudgetCreate, user_id: str = Depends(get_current_user_id)):
     """Save or update budget for a specific month"""
     db = get_database()
     
     budget_dict = budget_data.model_dump()
-    budget_dict["user_id"] = current_user.id
+    budget_dict["user_id"] = user_id
     budget_dict["month"] = month
     budget_dict["updated_at"] = datetime.utcnow()
     
     # Check if budget exists for this user and month
-    existing = await db.budgets.find_one({"month": month, "user_id": current_user.id})
+    existing = await db.budgets.find_one({"month": month, "user_id": user_id})
     
     if existing:
         # Update existing budget
         budget_dict["created_at"] = existing.get("created_at", datetime.utcnow())
         await db.budgets.update_one(
-            {"month": month, "user_id": current_user.id},
+            {"month": month, "user_id": user_id},
             {"$set": budget_dict}
         )
-        result = await db.budgets.find_one({"month": month, "user_id": current_user.id})
+        result = await db.budgets.find_one({"month": month, "user_id": user_id})
     else:
         # Create new budget
         budget_dict["created_at"] = datetime.utcnow()
@@ -556,7 +556,7 @@ async def save_budget(month: str, budget_data: BudgetCreate, current_user: UserR
     return budget_helper(result)
 
 @router.get("/budget/lifetime/stats", response_model=BudgetLifetimeStats)
-async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_current_user)):
+async def get_lifetime_budget_stats(user_id: str = Depends(get_current_user_id)):
     """Get lifetime budget statistics across all months for the current user"""
     db = get_database()
     
@@ -565,7 +565,7 @@ async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_cur
     total_personal_expenses = 0.0
     total_shared_savings = 0.0
     
-    async for budget in db.budgets.find({"user_id": current_user.id}):
+    async for budget in db.budgets.find({"user_id": user_id}):
         # Sum income from both users
         for item in budget.get("income_user1", []):
             total_income += item.get("value", 0.0)
@@ -597,7 +597,7 @@ async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_cur
     )
 
 @router.get("/budget/monthly/stats", response_model=MonthlyStats)
-async def get_monthly_budget_stats(current_user: UserResponse = Depends(get_current_user)):
+async def get_monthly_budget_stats(user_id: str = Depends(get_current_user_id)):
     """Get current and previous month budget statistics for comparison"""
     db = get_database()
     from datetime import datetime
@@ -614,7 +614,7 @@ async def get_monthly_budget_stats(current_user: UserResponse = Depends(get_curr
     
     # Function to calculate stats for a month
     async def get_month_stats(month: str):
-        budget = await db.budgets.find_one({"user_id": current_user.id, "month": month})
+        budget = await db.budgets.find_one({"user_id": user_id, "month": month})
         
         if not budget:
             return 0.0, 0.0, 0.0
