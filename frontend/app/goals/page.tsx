@@ -3,15 +3,22 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, X, Trash2, GripVertical } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Plus, X, Trash2, GripVertical, Pencil } from "lucide-react";
 import { api, Goal } from "@/lib/api";
 
 export default function GoalsPage() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [newGoalName, setNewGoalName] = useState("");
   const [newGoalTarget, setNewGoalTarget] = useState("");
+  const [editGoalName, setEditGoalName] = useState("");
+  const [editGoalTarget, setEditGoalTarget] = useState("");
   const [loading, setLoading] = useState(true);
   const [lifetimeSavings, setLifetimeSavings] = useState(0);
 
@@ -127,6 +134,67 @@ export default function GoalsPage() {
     } catch (error) {
       console.error("Failed to delete goal:", error);
       alert("Failed to delete goal. Please try again.");
+    }
+  };
+
+  const openDeleteDialog = (goal: Goal) => {
+    setGoalToDelete(goal);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteGoal = () => {
+    if (goalToDelete) {
+      handleDeleteGoal(goalToDelete.id);
+      setGoalToDelete(null);
+    }
+  };
+
+  const handleEditGoal = (goal: Goal) => {
+    setEditingGoal(goal);
+    setEditGoalName(goal.name);
+    setEditGoalTarget(goal.target.toString());
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateGoal = async () => {
+    if (!editingGoal) return;
+
+    if (!editGoalName.trim() || !editGoalTarget) {
+      alert("Please fill in both name and target amount");
+      return;
+    }
+
+    const target = parseFloat(editGoalTarget);
+    if (isNaN(target) || target <= 0) {
+      alert("Please enter a valid target amount");
+      return;
+    }
+
+    try {
+      const updatedGoal = await api.updateGoal(editingGoal.id, {
+        name: editGoalName.trim(),
+        target: target,
+      });
+
+      // Update goals list with the updated goal
+      const updatedGoals = goals.map(goal => 
+        goal.id === updatedGoal.id ? updatedGoal : goal
+      );
+      setGoals(updatedGoals);
+      
+      // Update selected goal if it was the one being edited
+      if (selectedGoal?.id === updatedGoal.id) {
+        setSelectedGoal(updatedGoal);
+      }
+      
+      // Close modal and reset state
+      setIsEditModalOpen(false);
+      setEditingGoal(null);
+      setEditGoalName("");
+      setEditGoalTarget("");
+    } catch (error) {
+      console.error("Failed to update goal:", error);
+      alert("Failed to update goal. Please try again.");
     }
   };
 
@@ -394,23 +462,40 @@ export default function GoalsPage() {
                     </p>
                   </div>
 
-                  {/* Delete Button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      console.log("Deleting goal:", goal);
-                      console.log("Goal ID:", goal.id);
-                      handleDeleteGoal(goal.id);
-                    }}
-                    className={`p-2 rounded-lg transition-colors ${
-                      selectedGoal?.id === goal.id
-                        ? "hover:bg-white/20 text-white"
-                        : "hover:bg-red-50 text-gray-400 hover:text-red-600"
-                    }`}
-                    aria-label="Delete goal"
-                  >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2">
+                    {/* Edit Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditGoal(goal);
+                      }}
+                      className={`p-2 rounded-lg transition-colors ${
+                        selectedGoal?.id === goal.id
+                          ? "hover:bg-white/20 text-white"
+                          : "hover:bg-blue-50 text-gray-400 hover:text-blue-600"
+                      }`}
+                      aria-label="Edit goal"
+                    >
+                      <Pencil className="w-5 h-5" />
+                    </button>
+
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteDialog(goal);
+                      }}
+                      className={`p-2 rounded-lg transition-colors ${
+                        selectedGoal?.id === goal.id
+                          ? "hover:bg-white/20 text-white"
+                          : "hover:bg-red-50 text-gray-400 hover:text-red-600"
+                      }`}
+                      aria-label="Delete goal"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
               </div>
             </CardContent>
           </Card>
@@ -600,6 +685,100 @@ export default function GoalsPage() {
           </div>
         </div>
       )}
+
+      {/* Edit Goal Modal */}
+      {isEditModalOpen && editingGoal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 relative">
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditingGoal(null);
+                setEditGoalName("");
+                setEditGoalTarget("");
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Edit Goal</h2>
+
+              <div className="space-y-4">
+                {/* Goal Name Input */}
+                <div>
+                  <label htmlFor="editGoalName" className="block text-sm font-medium text-gray-700 mb-2">
+                    Goal Name
+                  </label>
+                  <input
+                    id="editGoalName"
+                    type="text"
+                    value={editGoalName}
+                    onChange={(e) => setEditGoalName(e.target.value)}
+                    placeholder="e.g., New Car, Vacation"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+
+                {/* Target Amount Input */}
+                <div>
+                  <label htmlFor="editGoalTarget" className="block text-sm font-medium text-gray-700 mb-2">
+                    Target Amount (kr)
+                  </label>
+                  <input
+                    id="editGoalTarget"
+                    type="number"
+                    value={editGoalTarget}
+                    onChange={(e) => setEditGoalTarget(e.target.value)}
+                    placeholder="e.g., 5000"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingGoal(null);
+                    setEditGoalName("");
+                    setEditGoalTarget("");
+                  }}
+                  className="flex-1 py-3"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateGoal}
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
+                >
+                  Update Goal
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => {
+          setIsDeleteDialogOpen(false);
+          setGoalToDelete(null);
+        }}
+        onConfirm={confirmDeleteGoal}
+        title="Delete Goal"
+        message={`Are you sure you want to delete "${goalToDelete?.name}"?\n\nThis action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 }
