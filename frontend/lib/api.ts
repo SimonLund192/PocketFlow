@@ -254,6 +254,23 @@ export interface GoalUpdate {
 }
 
 export const api = {
+  // Dev-only user endpoints
+  async listUsers(): Promise<User[]> {
+    return requestJson<User[]>('/api/users', { method: 'GET' }, 'Failed to fetch users');
+  },
+
+  async createUser(data: RegisterData): Promise<User> {
+    // Backend expects the same payload as the register endpoint.
+    return requestJson<User>(
+      '/api/users',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      'Failed to create user'
+    );
+  },
+
   // Authentication endpoints
   async register(data: RegisterData): Promise<User> {
     return requestJson<User>(

@@ -19,4 +19,6 @@ async def close_mongo_connection():
 
 def get_database():
     database_name = os.getenv("DATABASE_NAME", "pocketflow")
+    if db.client is None:
+        raise RuntimeError("Database client is not initialized. Did you forget to connect_to_mongo()?")
     return db.client[database_name]

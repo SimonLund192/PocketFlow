@@ -3,6 +3,7 @@
 import { Home, Target, Calculator, PieChart, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { DevUserSwitcher } from "@/components/DevUserSwitcher";
 
 const navItems = [
   { icon: Home, label: "Dashboard", href: "/" },
@@ -54,7 +55,8 @@ export function Sidebar() {
       </nav>
 
       {/* User Avatar */}
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <DevUserSwitcher />
         <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center">
           <span className="text-[#4E4EFF] font-semibold text-sm">U</span>
         </div>

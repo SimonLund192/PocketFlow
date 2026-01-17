@@ -16,6 +16,33 @@ describe("api.ts request normalization", () => {
     jest.resetModules();
   });
 
+  it('uses updated selected user id on subsequent calls', async () => {
+    const fetchMock = jest.fn();
+    (globalThis as any).fetch = fetchMock;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ net_income: 0, total_savings: 0, total_expenses: 0, goals_achieved: 0, period_change_percentage: 0, last_month_net_income: 0 }),
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ net_income: 0, total_savings: 0, total_expenses: 0, goals_achieved: 0, period_change_percentage: 0, last_month_net_income: 0 }),
+    });
+
+    localStorage.setItem('selected_user_id', 'user-a');
+    const { api } = await import("../lib/api");
+    await api.getDashboardStats();
+    expect(fetchMock.mock.calls[0][1].headers['X-User-Id']).toBe('user-a');
+
+    localStorage.setItem('selected_user_id', 'user-b');
+    await api.getDashboardStats();
+    expect(fetchMock.mock.calls[1][1].headers['X-User-Id']).toBe('user-b');
+  });
+
   test("attaches X-User-Id header", async () => {
     setSelectedUserId("u1");
 
