@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 // Dev-only user context contract:
 // The backend requires an explicit user identifier via `X-User-Id` on all
@@ -37,6 +37,65 @@ const getAuthHeaders = (): HeadersInit => {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+};
+
+export type ApiError = {
+  status: number;
+  detail: string;
+  url: string;
+  data?: unknown;
+};
+
+const isJsonResponse = (res: Response) => {
+  const ct = res.headers.get('content-type') || '';
+  return ct.includes('application/json');
+};
+
+const safeParseJson = async <T>(res: Response): Promise<T | undefined> => {
+  if (!isJsonResponse(res)) return undefined;
+  try {
+    return (await res.json()) as T;
+  } catch {
+    return undefined;
+  }
+};
+
+const buildApiError = async (res: Response, url: string, fallbackDetail: string): Promise<ApiError> => {
+  const data = await safeParseJson<any>(res);
+  const detail = (data && (data.detail || data.message)) ? String(data.detail || data.message) : fallbackDetail;
+  return {
+    status: res.status,
+    detail,
+    url,
+    data,
+  };
+};
+
+const requestJson = async <T>(path: string, init: RequestInit = {}, fallbackError: string): Promise<T> => {
+  const url = `${API_URL}${path}`;
+
+  const headers: HeadersInit = {
+    ...getAuthHeaders(),
+    ...(init.headers || {}),
+  };
+
+  const res = await fetch(url, {
+    cache: 'no-store',
+    ...init,
+    headers,
+  });
+
+  if (!res.ok) {
+    throw await buildApiError(res, url, fallbackError);
+  }
+
+  // Normalize empty-body successes (e.g. 204) to `null`.
+  if (res.status === 204) {
+    return null as unknown as T;
+  }
+
+  const data = await safeParseJson<T>(res);
+  return (data ?? (null as unknown as T));
 };
 
 export interface Transaction {
@@ -197,249 +256,186 @@ export interface GoalUpdate {
 export const api = {
   // Authentication endpoints
   async register(data: RegisterData): Promise<User> {
-    const res = await fetch(`${API_URL}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: 'Registration failed' }));
-      throw new Error(errorData.detail || 'Registration failed');
-    }
-    return res.json();
+    return requestJson<User>(
+      '/api/auth/register',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      },
+      'Registration failed'
+    );
   },
 
   async login(credentials: LoginCredentials): Promise<AuthToken> {
-    const res = await fetch(`${API_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: 'Login failed' }));
-      throw new Error(errorData.detail || 'Login failed');
-    }
-    return res.json();
+    return requestJson<AuthToken>(
+      '/api/auth/login',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials),
+      },
+      'Login failed'
+    );
   },
 
   async getCurrentUser(): Promise<User> {
-    const res = await fetch(`${API_URL}/api/auth/me`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) {
-      if (res.status === 401) {
-        // Clear invalid token
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-        }
+    try {
+      return await requestJson<User>('/api/auth/me', {}, 'Failed to get current user');
+    } catch (err: any) {
+      if (err?.status === 401 && typeof window !== 'undefined') {
+        localStorage.removeItem('token');
       }
-      throw new Error('Failed to get current user');
+      throw err;
     }
-    return res.json();
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store', headers: getAuthHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch dashboard stats');
-    return res.json();
+    return requestJson<DashboardStats>('/api/dashboard/stats', {}, 'Failed to fetch dashboard stats');
   },
 
   async getBalanceTrends(): Promise<BalanceTrend[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/balance-trends`, { 
-      cache: 'no-store',
-      headers: getAuthHeaders()
-    });
-    if (!res.ok) throw new Error('Failed to fetch balance trends');
-    return res.json();
+    return requestJson<BalanceTrend[]>('/api/dashboard/balance-trends', {}, 'Failed to fetch balance trends');
   },
 
   async getSavingsTrends(): Promise<SavingsTrend[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/savings-trends`, { 
-      cache: 'no-store',
-      headers: getAuthHeaders()
-    });
-    if (!res.ok) throw new Error('Failed to fetch savings trends');
-    return res.json();
+    return requestJson<SavingsTrend[]>('/api/dashboard/savings-trends', {}, 'Failed to fetch savings trends');
   },
 
   async getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, { cache: 'no-store', headers: getAuthHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch expense breakdown');
-    return res.json();
+    return requestJson<ExpenseBreakdown[]>('/api/dashboard/expense-breakdown', {}, 'Failed to fetch expense breakdown');
   },
 
   async getBudgetExpenseBreakdown(): Promise<BudgetExpenseBreakdown[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/budget-expense-breakdown`, { 
-      cache: 'no-store',
-      headers: getAuthHeaders()
-    });
-    if (!res.ok) throw new Error('Failed to fetch budget expense breakdown');
-    return res.json();
+    return requestJson<BudgetExpenseBreakdown[]>(
+      '/api/dashboard/budget-expense-breakdown',
+      {},
+      'Failed to fetch budget expense breakdown'
+    );
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    const res = await fetch(`${API_URL}/api/transactions`, { cache: 'no-store', headers: getAuthHeaders() });
-    if (!res.ok) throw new Error('Failed to fetch transactions');
-    return res.json();
+    return requestJson<Transaction[]>('/api/transactions', {}, 'Failed to fetch transactions');
   },
 
   async getBudget(month: string): Promise<Budget> {
-    const res = await fetch(`${API_URL}/api/budget/${month}`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Failed to fetch budget');
-    return res.json();
+    return requestJson<Budget>(`/api/budget/${month}`, {}, 'Failed to fetch budget');
   },
 
   async saveBudget(month: string, budget: Omit<Budget, '_id' | 'month'>): Promise<Budget> {
-    const res = await fetch(`${API_URL}/api/budget/${month}`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(budget),
-    });
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
-      console.error('Save budget error:', errorData);
-      throw new Error(`Failed to save budget: ${JSON.stringify(errorData)}`);
-    }
-    return res.json();
+    return requestJson<Budget>(
+      `/api/budget/${month}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(budget),
+      },
+      'Failed to save budget'
+    );
   },
 
   async getBudgetLifetimeStats(): Promise<BudgetLifetimeStats> {
-    const res = await fetch(`${API_URL}/api/budget/lifetime/stats`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Failed to fetch lifetime budget stats');
-    return res.json();
+    return requestJson<BudgetLifetimeStats>('/api/budget/lifetime/stats', {}, 'Failed to fetch lifetime budget stats');
   },
 
   async getMonthlyStats(): Promise<MonthlyStats> {
-    const res = await fetch(`${API_URL}/api/budget/monthly/stats`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Failed to fetch monthly stats');
-    return res.json();
+    return requestJson<MonthlyStats>('/api/budget/monthly/stats', {}, 'Failed to fetch monthly stats');
   },
 
   // Category endpoints
   async getCategories(): Promise<Category[]> {
-    const res = await fetch(`${API_URL}/api/categories`, {
-      headers: getAuthHeaders(),
-      cache: 'no-store',
-    });
-    if (!res.ok) throw new Error('Failed to fetch categories');
-    return res.json();
+    return requestJson<Category[]>('/api/categories', {}, 'Failed to fetch categories');
   },
 
   async createCategory(data: CategoryCreate): Promise<Category> {
-    const res = await fetch(`${API_URL}/api/categories`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.detail || 'Failed to create category');
-    }
-    return res.json();
+    return requestJson<Category>(
+      '/api/categories',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      'Failed to create category'
+    );
   },
 
   async updateCategory(id: string, data: CategoryUpdate): Promise<Category> {
-    const res = await fetch(`${API_URL}/api/categories/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to update category');
-    return res.json();
+    return requestJson<Category>(
+      `/api/categories/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+      'Failed to update category'
+    );
   },
 
   async deleteCategory(id: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_URL}/api/categories/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to delete category');
-    return res.json();
+    return requestJson<{ message: string }>(`/api/categories/${id}`, { method: 'DELETE' }, 'Failed to delete category');
   },
 
   // Goal endpoints
   async getGoals(): Promise<Goal[]> {
-    const res = await fetch(`${API_URL}/api/goals`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch goals');
-    return res.json();
+    return requestJson<Goal[]>('/api/goals', {}, 'Failed to fetch goals');
   },
 
   async createGoal(data: GoalCreate): Promise<Goal> {
-    const res = await fetch(`${API_URL}/api/goals`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to create goal');
-    return res.json();
+    return requestJson<Goal>(
+      '/api/goals',
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      },
+      'Failed to create goal'
+    );
   },
 
   async updateGoal(id: string, data: GoalUpdate): Promise<Goal> {
-    const res = await fetch(`${API_URL}/api/goals/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) throw new Error('Failed to update goal');
-    return res.json();
+    return requestJson<Goal>(
+      `/api/goals/${id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      },
+      'Failed to update goal'
+    );
   },
 
   async deleteGoal(id: string): Promise<{ message: string }> {
-    const res = await fetch(`${API_URL}/api/goals/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to delete goal');
-    return res.json();
+    return requestJson<{ message: string }>(`/api/goals/${id}`, { method: 'DELETE' }, 'Failed to delete goal');
   },
 
   async reorderGoals(goalOrders: Array<{ id: string; order: number }>): Promise<{ message: string }> {
-    const res = await fetch(`${API_URL}/api/goals/reorder`, {
-      method: 'PATCH',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(goalOrders),
-    });
-    if (!res.ok) throw new Error('Failed to reorder goals');
-    return res.json();
+    return requestJson<{ message: string }>(
+      '/api/goals/reorder',
+      {
+        method: 'PATCH',
+        body: JSON.stringify(goalOrders),
+      },
+      'Failed to reorder goals'
+    );
   },
 
   // Admin endpoints
   async clearTransactions(): Promise<{ message: string; deleted_count: number }> {
-    const res = await fetch(`${API_URL}/api/admin/clear/transactions`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to clear transactions');
-    return res.json();
+    return requestJson<{ message: string; deleted_count: number }>(
+      '/api/admin/clear/transactions',
+      { method: 'DELETE' },
+      'Failed to clear transactions'
+    );
   },
 
   async clearBudgets(): Promise<{ message: string; deleted_count: number }> {
-    const res = await fetch(`${API_URL}/api/admin/clear/budgets`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to clear budgets');
-    return res.json();
+    return requestJson<{ message: string; deleted_count: number }>(
+      '/api/admin/clear/budgets',
+      { method: 'DELETE' },
+      'Failed to clear budgets'
+    );
   },
 
   async clearAllData(): Promise<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }> {
-    const res = await fetch(`${API_URL}/api/admin/clear/all`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to clear all data');
-    return res.json();
+    return requestJson<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }>(
+      '/api/admin/clear/all',
+      { method: 'DELETE' },
+      'Failed to clear all data'
+    );
   },
 };
