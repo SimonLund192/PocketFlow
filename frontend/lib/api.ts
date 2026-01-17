@@ -6,14 +6,34 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('token');
 };
 
+// Dev-mode user context header used by user-scoped backend routes.
+// Stored by the DevUserSwitcher.
+export const getSelectedUserId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('selected_user_id');
+};
+
+export const setSelectedUserId = (userId: string | null): void => {
+  if (typeof window === 'undefined') return;
+  if (!userId) {
+    localStorage.removeItem('selected_user_id');
+    return;
+  }
+  localStorage.setItem('selected_user_id', userId);
+};
+
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
   const token = getAuthToken();
+  const selectedUserId = getSelectedUserId();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (selectedUserId) {
+    headers['X-User-Id'] = selectedUserId;
   }
   return headers;
 };
@@ -107,6 +127,12 @@ export interface User {
   created_at: string;
 }
 
+export interface UserCreate {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -174,6 +200,26 @@ export interface GoalUpdate {
 }
 
 export const api = {
+  // Dev user endpoints (no auth; used by DevUserSwitcher)
+  async listUsers(): Promise<User[]> {
+    const res = await fetch(`${API_URL}/api/users`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch users');
+    return res.json();
+  },
+
+  async createUser(data: UserCreate): Promise<User> {
+    const res = await fetch(`${API_URL}/api/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Failed to create user' }));
+      throw new Error(errorData.detail || 'Failed to create user');
+    }
+    return res.json();
+  },
+
   // Authentication endpoints
   async register(data: RegisterData): Promise<User> {
     const res = await fetch(`${API_URL}/api/auth/register`, {
@@ -219,7 +265,10 @@ export const api = {
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
-    const res = await fetch(`${API_URL}/api/dashboard/stats`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/dashboard/stats`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch dashboard stats');
     return res.json();
   },
@@ -243,7 +292,10 @@ export const api = {
   },
 
   async getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
-    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch expense breakdown');
     return res.json();
   },
@@ -258,7 +310,10 @@ export const api = {
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    const res = await fetch(`${API_URL}/api/transactions`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/api/transactions`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
     if (!res.ok) throw new Error('Failed to fetch transactions');
     return res.json();
   },

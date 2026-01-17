@@ -67,6 +67,76 @@ docker-compose down -v
 - `GET /api/dashboard/expense-breakdown` - Get expense breakdown by category
 - `DELETE /api/transactions/{id}` - Delete a transaction
 
+## File Structure
+
+At a high level, this repo is split into a Next.js frontend and a FastAPI backend:
+
+```
+Pocketflow/
+├── frontend/                  # Next.js 14 App Router (TypeScript)
+│   ├── app/                   # Routes (Server Components by default)
+│   ├── components/            # UI + page components (shadcn/ui)
+│   ├── contexts/              # React contexts (e.g. AuthContext)
+│   ├── lib/api.ts             # Centralized fetch-based API client (do not scatter fetch calls)
+│   └── __tests__/              # Jest + React Testing Library
+├── backend/                   # FastAPI + MongoDB (Motor)
+│   ├── app/
+│   │   ├── main.py            # FastAPI app entrypoint
+│   │   ├── routes.py          # Router aggregator (includes per-feature routers)
+│   │   ├── routes/            # Per-feature routers (transactions, dashboard, budgets, goals, users)
+│   │   ├── models.py          # Pydantic models
+│   │   ├── database.py        # Mongo connection helpers
+│   │   ├── auth.py            # User context dependency (dev mode today; auth-ready interface)
+│   │   └── seed_data.py       # Sample data seeder
+│   └── tests/                 # pytest integration tests
+├── docs/                      # Developer docs (incl. AUTH_FUTURE.md)
+└── docker-compose.yml         # Docker orchestration (backend + MongoDB)
+```
+
+## Testing
+
+This repo uses lightweight, fast tests in both backend and frontend.
+
+### Backend (pytest)
+
+- Framework: `pytest` + `pytest-asyncio`
+- Style: async integration tests via an ASGI client
+
+Run tests (recommended via Docker so deps match the running backend image):
+
+```bash
+docker compose run --rm backend pytest
+```
+
+### Frontend (Jest + React Testing Library)
+
+- Framework: Jest + React Testing Library
+- Tests live in `frontend/__tests__/`
+
+Run tests:
+
+```bash
+cd frontend
+npm test
+```
+
+## API style
+
+### REST conventions
+
+- Backend routes are under the `/api` prefix (see `backend/app/main.py`).
+- FastAPI routers are composed in `backend/app/routes.py` and split by feature under `backend/app/routes/`.
+- Endpoints generally follow REST conventions (`GET`/`POST`/`PUT`/`DELETE`).
+
+### User context (dev-mode today; auth-ready interface)
+
+This app currently has **no real authentication enforced end-to-end**.
+
+- **Backend**: user-scoped endpoints depend on `app.auth.get_user_context()` which currently requires the `X-User-Id` header.
+- **Frontend**: user selection is stored via `getSelectedUserId()` in `frontend/lib/api.ts`, and `api.ts` attaches the `X-User-Id` header consistently.
+
+To swap in real auth later (JWT/cookies), see `docs/AUTH_FUTURE.md`.
+
 ## Project Structure
 
 ```
@@ -75,9 +145,11 @@ budget-tracker/
 ├── backend/           # FastAPI backend application
 │   ├── app/
 │   │   ├── main.py       # FastAPI app
-│   │   ├── routes.py     # API routes
+│   │   ├── routes.py     # Router aggregator
+│   │   ├── routes/       # Feature routers
 │   │   ├── models.py     # Pydantic models
 │   │   ├── database.py   # MongoDB connection
+│   │   ├── auth.py       # User context dependency (dev mode / auth-ready interface)
 │   │   └── seed_data.py  # Sample data seeder
 │   ├── Dockerfile
 │   └── requirements.txt

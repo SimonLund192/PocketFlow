@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -40,17 +40,18 @@ class Transaction(BaseModel):
     description: Optional[str] = None
     date: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        populate_by_name = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "type": "expense",
                 "category": "Food",
                 "amount": 45.50,
                 "description": "Grocery shopping",
-                "date": "2026-01-15T10:30:00"
+                "date": "2026-01-15T10:30:00",
             }
-        }
+        },
+    )
 
 class TransactionCreate(BaseModel):
     type: TransactionType
@@ -110,8 +111,7 @@ class Budget(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class BudgetCreate(BaseModel):
     income_user1: List[BudgetItem] = Field(default_factory=list)
@@ -146,8 +146,7 @@ class User(BaseModel):
     hashed_password: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -181,8 +180,7 @@ class Category(BaseModel):
     type: str  # 'income', 'expense', or 'savings'
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 class CategoryCreate(BaseModel):
     name: str
@@ -208,9 +206,9 @@ class Goal(BaseModel):
     order: int = 0  # Order/priority of the goal (lower number = higher priority)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
-    model_config = {
-        "populate_by_name": True,
-        "json_schema_extra": {
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={
             "example": {
                 "id": "507f1f77bcf86cd799439011",
                 "user_id": "user123",
@@ -219,10 +217,10 @@ class Goal(BaseModel):
                 "target": 20000.0,
                 "percentage": 25.0,
                 "color": "bg-green-500",
-                "order": 0
+                "order": 0,
             }
-        }
-    }
+        },
+    )
 
 class GoalCreate(BaseModel):
     name: str

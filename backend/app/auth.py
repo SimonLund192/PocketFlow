@@ -2,11 +2,23 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from .models import TokenData, UserResponse
 from .database import get_database
 import os
+
+
+class UserContext:
+    """Structured user context for request-scoped data.
+
+    Today this is backed by the dev-mode `X-User-Id` header. Later, when real
+    authentication is implemented, this can be derived from JWT/cookies without
+    changing route handler signatures (they should depend on `get_user_context`).
+    """
+
+    def __init__(self, user_id: str):
+        self.user_id = user_id
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -18,6 +30,33 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # OAuth2 scheme for token extraction
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+
+def get_current_user_id(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+) -> str:
+    """Dev-mode user context.
+
+    Most resource endpoints in this app are scoped by an explicit `X-User-Id` header
+    (used by the Dev User Switcher) rather than full auth; this keeps tests and
+    local development simple until auth is wired end-to-end.
+    """
+
+    if x_user_id is None or not str(x_user_id).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-User-Id header is required",
+        )
+    return str(x_user_id).strip()
+
+
+def get_user_context(user_id: str = Depends(get_current_user_id)) -> UserContext:
+    """Dependency that returns structured user context.
+
+    This is the single backend integration point for future auth.
+    """
+
+    return UserContext(user_id=user_id)
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
