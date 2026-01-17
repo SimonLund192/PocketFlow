@@ -21,6 +21,7 @@ export default function GoalsPage() {
   const [editGoalTarget, setEditGoalTarget] = useState("");
   const [loading, setLoading] = useState(true);
   const [lifetimeSavings, setLifetimeSavings] = useState(0);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Load goals and lifetime savings from database on component mount
   useEffect(() => {
@@ -31,16 +32,15 @@ export default function GoalsPage() {
   const loadGoals = async () => {
     try {
       setLoading(true);
+      setPageError(null);
       const fetchedGoals = await api.getGoals();
-      console.log("Fetched goals:", fetchedGoals);
-      console.log("First goal ID:", fetchedGoals[0]?.id);
-      console.log("First goal _id:", (fetchedGoals[0] as any)?._id);
       setGoals(fetchedGoals);
       if (fetchedGoals.length > 0 && !selectedGoal) {
         setSelectedGoal(fetchedGoals[0]);
       }
     } catch (error) {
       console.error("Failed to load goals:", error);
+      setPageError("Failed to load goals. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -86,17 +86,18 @@ export default function GoalsPage() {
 
   const handleAddGoal = async () => {
     if (!newGoalName.trim() || !newGoalTarget) {
-      alert("Please fill in both name and target amount");
+      setPageError("Please fill in both name and target amount.");
       return;
     }
 
     const target = parseFloat(newGoalTarget);
     if (isNaN(target) || target <= 0) {
-      alert("Please enter a valid target amount");
+      setPageError("Please enter a valid target amount.");
       return;
     }
 
     try {
+      setPageError(null);
       const newGoal = await api.createGoal({
         name: newGoalName.trim(),
         target: target,
@@ -111,18 +112,19 @@ export default function GoalsPage() {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Failed to create goal:", error);
-      alert("Failed to create goal. Please try again.");
+      setPageError("Failed to create goal. Please try again.");
     }
   };
 
   const handleDeleteGoal = async (goalId: string) => {
-    if (!goalId || goalId === 'undefined') {
+    if (!goalId || goalId === "undefined") {
       console.error("Invalid goal ID:", goalId);
-      alert("Cannot delete goal: Invalid goal ID");
+      setPageError("Cannot delete goal: invalid goal ID.");
       return;
     }
     
     try {
+      setPageError(null);
       await api.deleteGoal(goalId);
       const updatedGoals = goals.filter(goal => goal.id !== goalId);
       setGoals(updatedGoals);
@@ -133,7 +135,7 @@ export default function GoalsPage() {
       }
     } catch (error) {
       console.error("Failed to delete goal:", error);
-      alert("Failed to delete goal. Please try again.");
+      setPageError("Failed to delete goal. Please try again.");
     }
   };
 
@@ -160,17 +162,18 @@ export default function GoalsPage() {
     if (!editingGoal) return;
 
     if (!editGoalName.trim() || !editGoalTarget) {
-      alert("Please fill in both name and target amount");
+      setPageError("Please fill in both name and target amount.");
       return;
     }
 
     const target = parseFloat(editGoalTarget);
     if (isNaN(target) || target <= 0) {
-      alert("Please enter a valid target amount");
+      setPageError("Please enter a valid target amount.");
       return;
     }
 
     try {
+      setPageError(null);
       const updatedGoal = await api.updateGoal(editingGoal.id, {
         name: editGoalName.trim(),
         target: target,
@@ -194,7 +197,7 @@ export default function GoalsPage() {
       setEditGoalTarget("");
     } catch (error) {
       console.error("Failed to update goal:", error);
-      alert("Failed to update goal. Please try again.");
+      setPageError("Failed to update goal. Please try again.");
     }
   };
 
@@ -362,6 +365,12 @@ export default function GoalsPage() {
         <span>/</span>
         <span className="text-gray-900 font-medium">Goals</span>
       </div>
+
+      {pageError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800">
+          {pageError}
+        </div>
+      )}
 
       {/* Info Banner */}
       {goals.length > 1 && (

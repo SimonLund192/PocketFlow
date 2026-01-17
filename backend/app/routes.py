@@ -130,7 +130,6 @@ async def get_me(current_user: UserResponse = Depends(get_current_user)):
 def transaction_helper(transaction) -> dict:
     return {
         "_id": str(transaction["_id"]),
-        "user_id": transaction.get("user_id"),
         "type": transaction["type"],
         "category": transaction["category"],
         "amount": transaction["amount"],
@@ -163,7 +162,7 @@ async def create_transaction(transaction: TransactionCreate, user_id: str = Depe
     return transaction_helper(new_transaction)
 
 @router.get("/dashboard/stats", response_model=DashboardStats)
-async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
+async def get_dashboard_stats():
     """Get dashboard statistics"""
     db = get_database()
     
@@ -174,7 +173,7 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     
     # Get all transactions
     all_transactions = []
-    async for transaction in db.transactions.find({"user_id": user_id}):
+    async for transaction in db.transactions.find():
         all_transactions.append(transaction)
     
     # Get this month's transactions
@@ -249,13 +248,13 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     )
 
 @router.get("/dashboard/balance-trends")
-async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
+async def get_balance_trends(current_user: UserResponse = Depends(get_current_user)):
     """Get cumulative shared and personal savings trends over time"""
     db = get_database()
     
     # Get all budgets for the user, sorted by month
     budgets = []
-    async for budget in db.budgets.find({"user_id": user_id}).sort("month", 1):
+    async for budget in db.budgets.find({"user_id": current_user.id}).sort("month", 1):
         budgets.append(budget)
     
     if not budgets:
@@ -299,13 +298,13 @@ async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
     return balance_trends
 
 @router.get("/dashboard/savings-trends", response_model=List[SavingsTrend])
-async def get_savings_trends(user_id: str = Depends(get_current_user_id)):
+async def get_savings_trends(current_user: UserResponse = Depends(get_current_user)):
     """Get cumulative savings trends by month for the current user"""
     db = get_database()
     
     # Get all budgets for the user, sorted by month
     budgets = []
-    async for budget in db.budgets.find({"user_id": user_id}).sort("month", 1):
+    async for budget in db.budgets.find({"user_id": current_user.id}).sort("month", 1):
         budgets.append(budget)
     
     if not budgets:
@@ -354,7 +353,7 @@ async def get_savings_trends(user_id: str = Depends(get_current_user_id)):
     return savings_trends
 
 @router.get("/dashboard/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+async def get_expense_breakdown():
     """Get expense breakdown by category for this month"""
     db = get_database()
     
@@ -365,7 +364,6 @@ async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
     # Get this month's expenses
     expenses = []
     async for transaction in db.transactions.find({
-        "user_id": user_id,
         "type": "expense",
         "date": {"$gte": start_of_month}
     }):
@@ -397,7 +395,7 @@ async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
     return breakdown
 
 @router.get("/dashboard/budget-expense-breakdown", response_model=List[BudgetExpenseBreakdown])
-async def get_budget_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+async def get_budget_expense_breakdown(current_user: UserResponse = Depends(get_current_user)):
     """Get expense breakdown by category from budget data, showing shared vs personal expenses"""
     db = get_database()
     
@@ -405,7 +403,7 @@ async def get_budget_expense_breakdown(user_id: str = Depends(get_current_user_i
     category_data = {}  # {category: {shared: amount, personal: amount}}
     total_expenses = 0.0
     
-    async for budget in db.budgets.find({"user_id": user_id}):
+    async for budget in db.budgets.find({"user_id": current_user.id}):
         # Process shared expenses
         for item in budget.get("shared_expenses", []):
             category = item.get("category", "Uncategorized")
@@ -458,16 +456,24 @@ async def get_budget_expense_breakdown(user_id: str = Depends(get_current_user_i
     return breakdown
 
 @router.delete("/transactions/{transaction_id}")
-async def delete_transaction(transaction_id: str, user_id: str = Depends(get_current_user_id)):
+async def delete_transaction(
+    transaction_id: str, user_id: str = Depends(get_current_user_id)
+):
     """Delete a transaction"""
     db = get_database()
 
     if not ObjectId.is_valid(transaction_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid transaction id")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid transaction id",
+        )
 
-    result = await db.transactions.delete_one({"_id": ObjectId(transaction_id), "user_id": user_id})
+    result = await db.transactions.delete_one(
+        {"_id": ObjectId(transaction_id), "user_id": user_id}
+    )
     if result.deleted_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+        # Owned-by-user not found (or doesn't exist)
+        raise HTTPException(status_code=404, detail="Transaction not found")
 
     return {"message": "Transaction deleted successfully"}
 
@@ -490,15 +496,15 @@ def budget_helper(budget) -> dict:
     }
 
 @router.get("/budget/{month}", response_model=Budget)
-async def get_budget(month: str, user_id: str = Depends(get_current_user_id)):
+async def get_budget(month: str, current_user: UserResponse = Depends(get_current_user)):
     """Get budget for a specific month (format: YYYY-MM)"""
     db = get_database()
     
-    budget = await db.budgets.find_one({"month": month, "user_id": user_id})
+    budget = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     if not budget:
         # Return empty budget structure if not found
         return {
-            "user_id": user_id,
+            "user_id": current_user.id,
             "month": month,
             "income_user1": [],
             "income_user2": [],
@@ -513,26 +519,26 @@ async def get_budget(month: str, user_id: str = Depends(get_current_user_id)):
     return budget_helper(budget)
 
 @router.post("/budget/{month}", response_model=Budget)
-async def save_budget(month: str, budget_data: BudgetCreate, user_id: str = Depends(get_current_user_id)):
+async def save_budget(month: str, budget_data: BudgetCreate, current_user: UserResponse = Depends(get_current_user)):
     """Save or update budget for a specific month"""
     db = get_database()
     
     budget_dict = budget_data.model_dump()
-    budget_dict["user_id"] = user_id
+    budget_dict["user_id"] = current_user.id
     budget_dict["month"] = month
     budget_dict["updated_at"] = datetime.utcnow()
     
     # Check if budget exists for this user and month
-    existing = await db.budgets.find_one({"month": month, "user_id": user_id})
+    existing = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     
     if existing:
         # Update existing budget
         budget_dict["created_at"] = existing.get("created_at", datetime.utcnow())
         await db.budgets.update_one(
-            {"month": month, "user_id": user_id},
+            {"month": month, "user_id": current_user.id},
             {"$set": budget_dict}
         )
-        result = await db.budgets.find_one({"month": month, "user_id": user_id})
+        result = await db.budgets.find_one({"month": month, "user_id": current_user.id})
     else:
         # Create new budget
         budget_dict["created_at"] = datetime.utcnow()
@@ -542,7 +548,7 @@ async def save_budget(month: str, budget_data: BudgetCreate, user_id: str = Depe
     return budget_helper(result)
 
 @router.get("/budget/lifetime/stats", response_model=BudgetLifetimeStats)
-async def get_lifetime_budget_stats(user_id: str = Depends(get_current_user_id)):
+async def get_lifetime_budget_stats(current_user: UserResponse = Depends(get_current_user)):
     """Get lifetime budget statistics across all months for the current user"""
     db = get_database()
     
@@ -551,7 +557,7 @@ async def get_lifetime_budget_stats(user_id: str = Depends(get_current_user_id))
     total_personal_expenses = 0.0
     total_shared_savings = 0.0
     
-    async for budget in db.budgets.find({"user_id": user_id}):
+    async for budget in db.budgets.find({"user_id": current_user.id}):
         # Sum income from both users
         for item in budget.get("income_user1", []):
             total_income += item.get("value", 0.0)
@@ -583,7 +589,7 @@ async def get_lifetime_budget_stats(user_id: str = Depends(get_current_user_id))
     )
 
 @router.get("/budget/monthly/stats", response_model=MonthlyStats)
-async def get_monthly_budget_stats(user_id: str = Depends(get_current_user_id)):
+async def get_monthly_budget_stats(current_user: UserResponse = Depends(get_current_user)):
     """Get current and previous month budget statistics for comparison"""
     db = get_database()
     from datetime import datetime
@@ -600,7 +606,7 @@ async def get_monthly_budget_stats(user_id: str = Depends(get_current_user_id)):
     
     # Function to calculate stats for a month
     async def get_month_stats(month: str):
-        budget = await db.budgets.find_one({"user_id": user_id, "month": month})
+        budget = await db.budgets.find_one({"user_id": current_user.id, "month": month})
         
         if not budget:
             return 0.0, 0.0, 0.0
@@ -659,11 +665,11 @@ async def clear_transactions():
 
 # Category endpoints
 @router.get("/categories", response_model=List[dict])
-async def get_categories(user_id: str = Depends(get_current_user_id)):
+async def get_categories(current_user: User = Depends(get_current_user)):
     """Get all categories for the current user"""
     db = get_database()
     
-    categories = await db.categories.find({"user_id": user_id}).to_list(None)
+    categories = await db.categories.find({"user_id": str(current_user.id)}).to_list(None)
     
     # Convert ObjectId to string
     for category in categories:
@@ -674,13 +680,13 @@ async def get_categories(user_id: str = Depends(get_current_user_id)):
     return categories
 
 @router.post("/categories", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_category(category_data: CategoryCreate, user_id: str = Depends(get_current_user_id)):
+async def create_category(category_data: CategoryCreate, current_user: User = Depends(get_current_user)):
     """Create a new category"""
     db = get_database()
     
     # Check if category with same name and type already exists for this user
     existing_category = await db.categories.find_one({
-        "user_id": user_id,
+        "user_id": str(current_user.id),
         "name": category_data.name,
         "type": category_data.type
     })
@@ -692,7 +698,7 @@ async def create_category(category_data: CategoryCreate, user_id: str = Depends(
         )
     
     category_dict = {
-        "user_id": user_id,
+        "user_id": str(current_user.id),
         "name": category_data.name,
         "icon": category_data.icon,
         "color": category_data.color,
@@ -711,14 +717,14 @@ async def create_category(category_data: CategoryCreate, user_id: str = Depends(
     return new_category
 
 @router.put("/categories/{category_id}", response_model=dict)
-async def update_category(category_id: str, category_data: CategoryUpdate, user_id: str = Depends(get_current_user_id)):
+async def update_category(category_id: str, category_data: CategoryUpdate, current_user: User = Depends(get_current_user)):
     """Update a category"""
     db = get_database()
     
     # Check if category exists and belongs to current user
     existing_category = await db.categories.find_one({
         "_id": ObjectId(category_id),
-        "user_id": user_id
+        "user_id": str(current_user.id)
     })
     
     if not existing_category:
@@ -746,14 +752,14 @@ async def update_category(category_id: str, category_data: CategoryUpdate, user_
     return updated_category
 
 @router.delete("/categories/{category_id}")
-async def delete_category(category_id: str, user_id: str = Depends(get_current_user_id)):
+async def delete_category(category_id: str, current_user: User = Depends(get_current_user)):
     """Delete a category"""
     db = get_database()
     
     # Check if category exists and belongs to current user
     existing_category = await db.categories.find_one({
         "_id": ObjectId(category_id),
-        "user_id": user_id
+        "user_id": str(current_user.id)
     })
     
     if not existing_category:
@@ -798,7 +804,9 @@ async def create_goal(goal_data: GoalCreate, user_id: str = Depends(get_current_
     db = get_database()
     
     # Get the highest order number for existing goals
-    existing_goals = await db.goals.find({"user_id": user_id}).sort("order", -1).limit(1).to_list(1)
+    existing_goals = (
+        await db.goals.find({"user_id": user_id}).sort("order", -1).limit(1).to_list(1)
+    )
     next_order = (existing_goals[0].get("order", 0) + 1) if existing_goals else 0
     
     # Calculate percentage
@@ -834,12 +842,17 @@ async def create_goal(goal_data: GoalCreate, user_id: str = Depends(get_current_
 async def update_goal(goal_id: str, goal_data: GoalUpdate, user_id: str = Depends(get_current_user_id)):
     """Update an existing goal"""
     db = get_database()
+
+    # Validate ObjectId format
+    if not ObjectId.is_valid(goal_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid goal ID format",
+        )
+    goal_object_id = ObjectId(goal_id)
     
     # Check if goal exists and belongs to user
-    existing_goal = await db.goals.find_one({
-        "_id": ObjectId(goal_id),
-        "user_id": user_id
-    })
+    existing_goal = await db.goals.find_one({"_id": goal_object_id, "user_id": user_id})
     
     if not existing_goal:
         raise HTTPException(
@@ -867,12 +880,25 @@ async def update_goal(goal_id: str, goal_data: GoalUpdate, user_id: str = Depend
         update_dict["percentage"] = round((saved / target * 100) if target > 0 else 0, 2)
     
     if update_dict:
-        await db.goals.update_one(
-            {"_id": ObjectId(goal_id)},
-            {"$set": update_dict}
+        result = await db.goals.update_one(
+            {"_id": goal_object_id, "user_id": user_id},
+            {"$set": update_dict},
         )
-    
-    updated_goal = await db.goals.find_one({"_id": ObjectId(goal_id)})
+        if result.matched_count == 0:
+            # Guard against cross-user updates.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Goal not found",
+            )
+
+    updated_goal = await db.goals.find_one(
+        {"_id": goal_object_id, "user_id": user_id}
+    )
+    if not updated_goal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Goal not found",
+        )
     
     return Goal(
         id=str(updated_goal["_id"]),
@@ -901,10 +927,7 @@ async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user_id))
         )
     
     # Check if goal exists and belongs to user
-    existing_goal = await db.goals.find_one({
-        "_id": goal_object_id,
-        "user_id": user_id
-    })
+    existing_goal = await db.goals.find_one({"_id": goal_object_id, "user_id": user_id})
     
     if not existing_goal:
         raise HTTPException(
@@ -912,7 +935,14 @@ async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user_id))
             detail="Goal not found"
         )
     
-    await db.goals.delete_one({"_id": goal_object_id})
+    result = await db.goals.delete_one(
+        {"_id": goal_object_id, "user_id": user_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Goal not found",
+        )
     
     return {"message": "Goal deleted successfully"}
 
@@ -923,17 +953,16 @@ async def reorder_goals(goal_orders: List[GoalOrderItem], user_id: str = Depends
     
     # Update each goal's order
     for item in goal_orders:
-        try:
-            goal_object_id = ObjectId(item.id)
-            
-            # Verify goal belongs to user and update order
-            await db.goals.update_one(
-                {"_id": goal_object_id, "user_id": user_id},
-                {"$set": {"order": item.order}}
-            )
-        except Exception as e:
-            print(f"Failed to update goal {item.id}: {str(e)}")
+        if not ObjectId.is_valid(item.id):
             continue
+
+        goal_object_id = ObjectId(item.id)
+
+        # Verify goal belongs to user and update order
+        await db.goals.update_one(
+            {"_id": goal_object_id, "user_id": user_id},
+            {"$set": {"order": item.order}},
+        )
     
     return {"message": "Goals reordered successfully"}
 

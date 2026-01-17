@@ -19,6 +19,24 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 # OAuth2 scheme for token extraction
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+
+def get_current_user_id(
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")
+) -> str:
+    """Dev-mode user context.
+
+    Most resource endpoints in this app are scoped by an explicit `X-User-Id` header
+    (used by the Dev User Switcher) rather than full auth; this keeps tests and
+    local development simple until auth is wired end-to-end.
+    """
+
+    if x_user_id is None or not str(x_user_id).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-User-Id header is required",
+        )
+    return str(x_user_id).strip()
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)
@@ -65,21 +83,3 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserResponse:
         full_name=user["full_name"],
         created_at=user["created_at"]
     )
-
-
-def get_current_user_id(x_user_id: Optional[str] = Header(default=None, alias="X-User-Id")) -> str:
-    """Dev-only user context contract.
-
-    Until we enforce real auth, every user-scoped request must provide an explicit
-    user identifier via the `X-User-Id` header.
-
-    We treat missing/blank user id as a client error (400).
-    """
-
-    if x_user_id is None or not x_user_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing required X-User-Id header",
-        )
-
-    return x_user_id.strip()
