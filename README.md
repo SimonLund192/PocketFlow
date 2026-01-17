@@ -88,3 +88,23 @@ budget-tracker/
 
 Frontend runs locally with hot reload for faster development.
 Backend and MongoDB run in Docker containers.
+
+## Testing
+
+See `docs/TESTING.md` for the full notes.
+
+### Backend tests (pytest)
+
+```bash
+cd backend
+python3 -m pip install -r requirements.txt
+python3 -m pytest
+```
+
+### Frontend tests (Jest + React Testing Library)
+
+```bash
+cd frontend
+npm install
+npm test
+```
