@@ -8,7 +8,10 @@ class Database:
 db = Database()
 
 async def connect_to_mongo():
-    mongodb_url = os.getenv("MONGODB_URL", "mongodb://admin:admin123@mongodb:27017")
+    # In tests we allow overriding the Mongo URL without affecting dev/prod.
+    mongodb_url = os.getenv("MONGODB_URL_TEST") or os.getenv(
+        "MONGODB_URL", "mongodb://admin:admin123@mongodb:27017"
+    )
     db.client = AsyncIOMotorClient(mongodb_url)
     print("Connected to MongoDB")
 

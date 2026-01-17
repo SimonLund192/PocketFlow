@@ -461,14 +461,15 @@ async def get_budget_expense_breakdown(user_id: str = Depends(get_current_user_i
 async def delete_transaction(transaction_id: str, user_id: str = Depends(get_current_user_id)):
     """Delete a transaction"""
     db = get_database()
-    
-    try:
-        result = await db.transactions.delete_one({"_id": ObjectId(transaction_id), "user_id": user_id})
-        if result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        return {"message": "Transaction deleted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+
+    if not ObjectId.is_valid(transaction_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid transaction id")
+
+    result = await db.transactions.delete_one({"_id": ObjectId(transaction_id), "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+
+    return {"message": "Transaction deleted successfully"}
 
 # Budget endpoints
 def budget_helper(budget) -> dict:

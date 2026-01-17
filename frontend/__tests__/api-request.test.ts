@@ -107,4 +107,20 @@ describe("api.ts request normalization", () => {
     // Pick any API call; requestJson should normalize empty body.
     await expect(api.getDashboardStats() as any).resolves.toBeNull();
   });
+
+  test("getTransactions includes X-User-Id header", async () => {
+    setSelectedUserId("tx-user");
+
+    const fetchSpy = jest.fn().mockResolvedValue(
+      mockJsonResponse(200, [])
+    );
+    (globalThis as any).fetch = fetchSpy;
+
+    const { api } = await import("../lib/api");
+    await api.getTransactions();
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["X-User-Id"]).toBe("tx-user");
+  });
 });
