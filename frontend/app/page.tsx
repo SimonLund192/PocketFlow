@@ -64,7 +64,7 @@ export default function DashboardPage() {
 
       try {
         setIsLoading(true);
-        const [stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats, monthlyStats, goals] = await Promise.all([
+        const [stats, balanceTrends, savingsTrends, budgetExpenseBreakdown, lifetimeStats, monthlyStats, goals] = await Promise.all([
           api.getDashboardStats(),
           api.getBalanceTrends(),
           api.getSavingsTrends(),
@@ -73,7 +73,6 @@ export default function DashboardPage() {
           api.getMonthlyStats(),
           api.getGoals(),
         ]);
-        setData({ stats, balanceTrends, savingsTrends, expenseBreakdown, lifetimeStats, monthlyStats });
         
         // Calculate goals achieved using hierarchical logic
         let remainingSavings = lifetimeStats.total_shared_savings;
@@ -94,13 +93,12 @@ export default function DashboardPage() {
           stats: { ...stats, goals_achieved: goalsAchieved }, 
           balanceTrends, 
           savingsTrends, 
-          expenseBreakdown, 
+          expenseBreakdown: budgetExpenseBreakdown,
           lifetimeStats, 
           monthlyStats 
         });
         setError(null);
       } catch (err: any) {
-        console.error('Failed to fetch dashboard data:', err);
         setError(err.message || 'Failed to load dashboard data');
       } finally {
         setIsLoading(false);

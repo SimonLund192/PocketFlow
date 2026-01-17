@@ -161,8 +161,19 @@ async def create_transaction(transaction: TransactionCreate, user_id: str = Depe
     
     return transaction_helper(new_transaction)
 
+
+async def _get_user_transactions(db, user_id: str):
+    """Fetch all transactions for a user.
+
+    Dashboard endpoints use this to avoid accidentally aggregating across users.
+    """
+    transactions = []
+    async for transaction in db.transactions.find({"user_id": user_id}):
+        transactions.append(transaction)
+    return transactions
+
 @router.get("/dashboard/stats", response_model=DashboardStats)
-async def get_dashboard_stats():
+async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     """Get dashboard statistics"""
     db = get_database()
     
@@ -171,10 +182,7 @@ async def get_dashboard_stats():
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     start_of_last_month = (start_of_month - timedelta(days=1)).replace(day=1)
     
-    # Get all transactions
-    all_transactions = []
-    async for transaction in db.transactions.find():
-        all_transactions.append(transaction)
+    all_transactions = await _get_user_transactions(db, user_id)
     
     # Get this month's transactions
     this_month_transactions = [
@@ -248,13 +256,13 @@ async def get_dashboard_stats():
     )
 
 @router.get("/dashboard/balance-trends")
-async def get_balance_trends(current_user: UserResponse = Depends(get_current_user)):
+async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
     """Get cumulative shared and personal savings trends over time"""
     db = get_database()
     
     # Get all budgets for the user, sorted by month
     budgets = []
-    async for budget in db.budgets.find({"user_id": current_user.id}).sort("month", 1):
+    async for budget in db.budgets.find({"user_id": user_id}).sort("month", 1):
         budgets.append(budget)
     
     if not budgets:
@@ -294,7 +302,6 @@ async def get_balance_trends(current_user: UserResponse = Depends(get_current_us
             "personal_savings": cumulative_personal
         })
     
-    print(f"DEBUG: Returning balance_trends: {balance_trends}")
     return balance_trends
 
 @router.get("/dashboard/savings-trends", response_model=List[SavingsTrend])
@@ -353,7 +360,7 @@ async def get_savings_trends(current_user: UserResponse = Depends(get_current_us
     return savings_trends
 
 @router.get("/dashboard/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown():
+async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
     """Get expense breakdown by category for this month"""
     db = get_database()
     
@@ -364,6 +371,7 @@ async def get_expense_breakdown():
     # Get this month's expenses
     expenses = []
     async for transaction in db.transactions.find({
+        "user_id": user_id,
         "type": "expense",
         "date": {"$gte": start_of_month}
     }):

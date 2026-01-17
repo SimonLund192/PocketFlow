@@ -1,24 +1,4 @@
-const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
-
-// Dev-only user context contract:
-// The backend requires an explicit user identifier via `X-User-Id` on all
-// user-scoped endpoints (until real auth is enforced end-to-end).
-const USER_ID_STORAGE_KEY = 'selected_user_id';
-
-export const getSelectedUserId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(USER_ID_STORAGE_KEY);
-};
-
-export const setSelectedUserId = (userId: string) => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(USER_ID_STORAGE_KEY, userId);
-};
-
-const getUserContextHeaders = (): HeadersInit => {
-  const userId = getSelectedUserId();
-  return userId ? { 'X-User-Id': userId } : {};
-};
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Helper function to get auth token
 const getAuthToken = (): string | null => {
@@ -26,76 +6,36 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('token');
 };
 
+// Dev-mode user context header used by user-scoped backend routes.
+// Stored by the DevUserSwitcher.
+export const getSelectedUserId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('selected_user_id');
+};
+
+export const setSelectedUserId = (userId: string | null): void => {
+  if (typeof window === 'undefined') return;
+  if (!userId) {
+    localStorage.removeItem('selected_user_id');
+    return;
+  }
+  localStorage.setItem('selected_user_id', userId);
+};
+
 // Helper function to get auth headers
 const getAuthHeaders = (): HeadersInit => {
   const token = getAuthToken();
+  const selectedUserId = getSelectedUserId();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  Object.assign(headers, getUserContextHeaders());
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  if (selectedUserId) {
+    headers['X-User-Id'] = selectedUserId;
+  }
   return headers;
-};
-
-export type ApiError = {
-  status: number;
-  detail: string;
-  url: string;
-  data?: unknown;
-};
-
-const isJsonResponse = (res: Response) => {
-  const ct = res.headers.get('content-type') || '';
-  return ct.includes('application/json');
-};
-
-const safeParseJson = async <T>(res: Response): Promise<T | undefined> => {
-  if (!isJsonResponse(res)) return undefined;
-  try {
-    return (await res.json()) as T;
-  } catch {
-    return undefined;
-  }
-};
-
-const buildApiError = async (res: Response, url: string, fallbackDetail: string): Promise<ApiError> => {
-  const data = await safeParseJson<any>(res);
-  const detail = (data && (data.detail || data.message)) ? String(data.detail || data.message) : fallbackDetail;
-  return {
-    status: res.status,
-    detail,
-    url,
-    data,
-  };
-};
-
-const requestJson = async <T>(path: string, init: RequestInit = {}, fallbackError: string): Promise<T> => {
-  const url = `${API_URL}${path}`;
-
-  const headers: HeadersInit = {
-    ...getAuthHeaders(),
-    ...(init.headers || {}),
-  };
-
-  const res = await fetch(url, {
-    cache: 'no-store',
-    ...init,
-    headers,
-  });
-
-  if (!res.ok) {
-    throw await buildApiError(res, url, fallbackError);
-  }
-
-  // Normalize empty-body successes (e.g. 204) to `null`.
-  if (res.status === 204) {
-    return null as unknown as T;
-  }
-
-  const data = await safeParseJson<T>(res);
-  return (data ?? (null as unknown as T));
 };
 
 export interface Transaction {
@@ -187,6 +127,12 @@ export interface User {
   created_at: string;
 }
 
+export interface UserCreate {
+  email: string;
+  password: string;
+  full_name: string;
+}
+
 export interface LoginCredentials {
   email: string;
   password: string;
@@ -254,205 +200,277 @@ export interface GoalUpdate {
 }
 
 export const api = {
-  // Dev-only user endpoints
+  // Dev user endpoints (no auth; used by DevUserSwitcher)
   async listUsers(): Promise<User[]> {
-    return requestJson<User[]>('/api/users', { method: 'GET' }, 'Failed to fetch users');
+    const res = await fetch(`${API_URL}/api/users`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch users');
+    return res.json();
   },
 
-  async createUser(data: RegisterData): Promise<User> {
-    // Backend expects the same payload as the register endpoint.
-    return requestJson<User>(
-      '/api/users',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-      'Failed to create user'
-    );
+  async createUser(data: UserCreate): Promise<User> {
+    const res = await fetch(`${API_URL}/api/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Failed to create user' }));
+      throw new Error(errorData.detail || 'Failed to create user');
+    }
+    return res.json();
   },
 
   // Authentication endpoints
   async register(data: RegisterData): Promise<User> {
-    return requestJson<User>(
-      '/api/auth/register',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      },
-      'Registration failed'
-    );
+    const res = await fetch(`${API_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Registration failed' }));
+      throw new Error(errorData.detail || 'Registration failed');
+    }
+    return res.json();
   },
 
   async login(credentials: LoginCredentials): Promise<AuthToken> {
-    return requestJson<AuthToken>(
-      '/api/auth/login',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      },
-      'Login failed'
-    );
+    const res = await fetch(`${API_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(credentials),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Login failed' }));
+      throw new Error(errorData.detail || 'Login failed');
+    }
+    return res.json();
   },
 
   async getCurrentUser(): Promise<User> {
-    try {
-      return await requestJson<User>('/api/auth/me', {}, 'Failed to get current user');
-    } catch (err: any) {
-      if (err?.status === 401 && typeof window !== 'undefined') {
-        localStorage.removeItem('token');
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      if (res.status === 401) {
+        // Clear invalid token
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+        }
       }
-      throw err;
+      throw new Error('Failed to get current user');
     }
+    return res.json();
   },
 
   async getDashboardStats(): Promise<DashboardStats> {
-    return requestJson<DashboardStats>('/api/dashboard/stats', {}, 'Failed to fetch dashboard stats');
+    const res = await fetch(`${API_URL}/api/dashboard/stats`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch dashboard stats');
+    return res.json();
   },
 
   async getBalanceTrends(): Promise<BalanceTrend[]> {
-    return requestJson<BalanceTrend[]>('/api/dashboard/balance-trends', {}, 'Failed to fetch balance trends');
+    const res = await fetch(`${API_URL}/api/dashboard/balance-trends`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch balance trends');
+    return res.json();
   },
 
   async getSavingsTrends(): Promise<SavingsTrend[]> {
-    return requestJson<SavingsTrend[]>('/api/dashboard/savings-trends', {}, 'Failed to fetch savings trends');
+    const res = await fetch(`${API_URL}/api/dashboard/savings-trends`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch savings trends');
+    return res.json();
   },
 
   async getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
-    return requestJson<ExpenseBreakdown[]>('/api/dashboard/expense-breakdown', {}, 'Failed to fetch expense breakdown');
+    const res = await fetch(`${API_URL}/api/dashboard/expense-breakdown`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch expense breakdown');
+    return res.json();
   },
 
   async getBudgetExpenseBreakdown(): Promise<BudgetExpenseBreakdown[]> {
-    return requestJson<BudgetExpenseBreakdown[]>(
-      '/api/dashboard/budget-expense-breakdown',
-      {},
-      'Failed to fetch budget expense breakdown'
-    );
+    const res = await fetch(`${API_URL}/api/dashboard/budget-expense-breakdown`, { 
+      cache: 'no-store',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch budget expense breakdown');
+    return res.json();
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    return requestJson<Transaction[]>('/api/transactions', {}, 'Failed to fetch transactions');
+    const res = await fetch(`${API_URL}/api/transactions`, {
+      cache: 'no-store',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch transactions');
+    return res.json();
   },
 
   async getBudget(month: string): Promise<Budget> {
-    return requestJson<Budget>(`/api/budget/${month}`, {}, 'Failed to fetch budget');
+    const res = await fetch(`${API_URL}/api/budget/${month}`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch budget');
+    return res.json();
   },
 
   async saveBudget(month: string, budget: Omit<Budget, '_id' | 'month'>): Promise<Budget> {
-    return requestJson<Budget>(
-      `/api/budget/${month}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(budget),
-      },
-      'Failed to save budget'
-    );
+    const res = await fetch(`${API_URL}/api/budget/${month}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(budget),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({ detail: 'Unknown error' }));
+      console.error('Save budget error:', errorData);
+      throw new Error(`Failed to save budget: ${JSON.stringify(errorData)}`);
+    }
+    return res.json();
   },
 
   async getBudgetLifetimeStats(): Promise<BudgetLifetimeStats> {
-    return requestJson<BudgetLifetimeStats>('/api/budget/lifetime/stats', {}, 'Failed to fetch lifetime budget stats');
+    const res = await fetch(`${API_URL}/api/budget/lifetime/stats`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch lifetime budget stats');
+    return res.json();
   },
 
   async getMonthlyStats(): Promise<MonthlyStats> {
-    return requestJson<MonthlyStats>('/api/budget/monthly/stats', {}, 'Failed to fetch monthly stats');
+    const res = await fetch(`${API_URL}/api/budget/monthly/stats`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch monthly stats');
+    return res.json();
   },
 
   // Category endpoints
   async getCategories(): Promise<Category[]> {
-    return requestJson<Category[]>('/api/categories', {}, 'Failed to fetch categories');
+    const res = await fetch(`${API_URL}/api/categories`, {
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) throw new Error('Failed to fetch categories');
+    return res.json();
   },
 
   async createCategory(data: CategoryCreate): Promise<Category> {
-    return requestJson<Category>(
-      '/api/categories',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-      'Failed to create category'
-    );
+    const res = await fetch(`${API_URL}/api/categories`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Failed to create category');
+    }
+    return res.json();
   },
 
   async updateCategory(id: string, data: CategoryUpdate): Promise<Category> {
-    return requestJson<Category>(
-      `/api/categories/${id}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      },
-      'Failed to update category'
-    );
+    const res = await fetch(`${API_URL}/api/categories/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update category');
+    return res.json();
   },
 
   async deleteCategory(id: string): Promise<{ message: string }> {
-    return requestJson<{ message: string }>(`/api/categories/${id}`, { method: 'DELETE' }, 'Failed to delete category');
+    const res = await fetch(`${API_URL}/api/categories/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete category');
+    return res.json();
   },
 
   // Goal endpoints
   async getGoals(): Promise<Goal[]> {
-    return requestJson<Goal[]>('/api/goals', {}, 'Failed to fetch goals');
+    const res = await fetch(`${API_URL}/api/goals`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to fetch goals');
+    return res.json();
   },
 
   async createGoal(data: GoalCreate): Promise<Goal> {
-    return requestJson<Goal>(
-      '/api/goals',
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      },
-      'Failed to create goal'
-    );
+    const res = await fetch(`${API_URL}/api/goals`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create goal');
+    return res.json();
   },
 
   async updateGoal(id: string, data: GoalUpdate): Promise<Goal> {
-    return requestJson<Goal>(
-      `/api/goals/${id}`,
-      {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      },
-      'Failed to update goal'
-    );
+    const res = await fetch(`${API_URL}/api/goals/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update goal');
+    return res.json();
   },
 
   async deleteGoal(id: string): Promise<{ message: string }> {
-    return requestJson<{ message: string }>(`/api/goals/${id}`, { method: 'DELETE' }, 'Failed to delete goal');
+    const res = await fetch(`${API_URL}/api/goals/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete goal');
+    return res.json();
   },
 
   async reorderGoals(goalOrders: Array<{ id: string; order: number }>): Promise<{ message: string }> {
-    return requestJson<{ message: string }>(
-      '/api/goals/reorder',
-      {
-        method: 'PATCH',
-        body: JSON.stringify(goalOrders),
-      },
-      'Failed to reorder goals'
-    );
+    const res = await fetch(`${API_URL}/api/goals/reorder`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(goalOrders),
+    });
+    if (!res.ok) throw new Error('Failed to reorder goals');
+    return res.json();
   },
 
   // Admin endpoints
   async clearTransactions(): Promise<{ message: string; deleted_count: number }> {
-    return requestJson<{ message: string; deleted_count: number }>(
-      '/api/admin/clear/transactions',
-      { method: 'DELETE' },
-      'Failed to clear transactions'
-    );
+    const res = await fetch(`${API_URL}/api/admin/clear/transactions`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear transactions');
+    return res.json();
   },
 
   async clearBudgets(): Promise<{ message: string; deleted_count: number }> {
-    return requestJson<{ message: string; deleted_count: number }>(
-      '/api/admin/clear/budgets',
-      { method: 'DELETE' },
-      'Failed to clear budgets'
-    );
+    const res = await fetch(`${API_URL}/api/admin/clear/budgets`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear budgets');
+    return res.json();
   },
 
   async clearAllData(): Promise<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }> {
-    return requestJson<{ message: string; transactions_deleted: number; budgets_deleted: number; total_deleted: number }>(
-      '/api/admin/clear/all',
-      { method: 'DELETE' },
-      'Failed to clear all data'
-    );
+    const res = await fetch(`${API_URL}/api/admin/clear/all`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to clear all data');
+    return res.json();
   },
 };
