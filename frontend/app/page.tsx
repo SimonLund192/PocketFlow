@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -25,55 +25,62 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (authLoading) return;
-      
-      if (!isAuthenticated) {
-        // Show empty state for non-authenticated users
-        setData({
-          stats: {
-            net_income: 0,
-            total_savings: 0,
-            total_expenses: 0,
-            goals_achieved: 0,
-            period_change_percentage: 0,
-            last_month_net_income: 0,
-          },
-          balanceTrends: [],
-          savingsTrends: [],
-          expenseBreakdown: [],
-          lifetimeStats: {
-            total_income: 0,
-            total_shared_expenses: 0,
-            total_personal_expenses: 0,
-            total_shared_savings: 0,
-            remaining: 0,
-          },
-          monthlyStats: {
-            current_income: 0,
-            current_expenses: 0,
-            current_savings: 0,
-            previous_income: 0,
-            previous_expenses: 0,
-            previous_savings: 0,
-          },
-        });
-        setIsLoading(false);
-        return;
-      }
+  const fetchData = useCallback(async () => {
+    if (authLoading) return;
 
-      try {
-        setIsLoading(true);
-        const [stats, balanceTrends, savingsTrends, budgetExpenseBreakdown, lifetimeStats, monthlyStats, goals] = await Promise.all([
-          api.getDashboardStats(),
-          api.getBalanceTrends(),
-          api.getSavingsTrends(),
-          api.getBudgetExpenseBreakdown(),
-          api.getBudgetLifetimeStats(),
-          api.getMonthlyStats(),
-          api.getGoals(),
-        ]);
+    if (!isAuthenticated) {
+      // Show empty state for non-authenticated users
+      setData({
+        stats: {
+          net_income: 0,
+          total_savings: 0,
+          total_expenses: 0,
+          goals_achieved: 0,
+          period_change_percentage: 0,
+          last_month_net_income: 0,
+        },
+        balanceTrends: [],
+        savingsTrends: [],
+        expenseBreakdown: [],
+        lifetimeStats: {
+          total_income: 0,
+          total_shared_expenses: 0,
+          total_personal_expenses: 0,
+          total_shared_savings: 0,
+          remaining: 0,
+        },
+        monthlyStats: {
+          current_income: 0,
+          current_expenses: 0,
+          current_savings: 0,
+          previous_income: 0,
+          previous_expenses: 0,
+          previous_savings: 0,
+        },
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const [
+        stats,
+        balanceTrends,
+        savingsTrends,
+        budgetExpenseBreakdown,
+        lifetimeStats,
+        monthlyStats,
+        goals,
+      ] = await Promise.all([
+        api.getDashboardStats(),
+        api.getBalanceTrends(),
+        api.getSavingsTrends(),
+        api.getBudgetExpenseBreakdown(),
+        api.getBudgetLifetimeStats(),
+        api.getMonthlyStats(),
+        api.getGoals(),
+      ]);
         
         // Calculate goals achieved using hierarchical logic
         let remainingSavings = lifetimeStats.total_shared_savings;
@@ -99,15 +106,16 @@ export default function DashboardPage() {
           monthlyStats 
         });
         setError(null);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load dashboard data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    } catch (err: any) {
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authLoading, isAuthenticated]);
 
+  useEffect(() => {
     fetchData();
-  }, [isAuthenticated, authLoading]);
+  }, [fetchData]);
 
   const formatCurrency = (num: number) => {
     return new Intl.NumberFormat('da-DK', {
@@ -222,7 +230,7 @@ export default function DashboardPage() {
             <ExpenseBreakdownChart data={expenseBreakdown} />
           </div>
         </div>
-        <AIAssistantPanel />
+        <AIAssistantPanel onConfirmed={fetchData} />
       </div>
 
       {/* Footer */}

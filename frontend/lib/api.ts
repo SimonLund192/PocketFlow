@@ -199,6 +199,41 @@ export interface GoalUpdate {
   order?: number;
 }
 
+export interface AiChatRequest {
+  text: string;
+}
+
+export interface AiToolCallPlanStep {
+  id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface AiToolCallPlan {
+  steps: AiToolCallPlanStep[];
+}
+
+export interface AiDryRunResponse {
+  status: "planned";
+  plan_id: string;
+  summary: string;
+  plan: AiToolCallPlan;
+}
+
+export interface AiConfirmRequest {
+  plan_id: string;
+}
+
+export interface AiConfirmResponse {
+  status: "executed";
+  results: Array<{
+    step_id: string;
+    status: "success" | "error";
+    output?: unknown;
+    error?: string;
+  }>;
+}
+
 export const api = {
   // Dev user endpoints (no auth; used by DevUserSwitcher)
   async listUsers(): Promise<User[]> {
@@ -471,6 +506,27 @@ export const api = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to clear all data');
+    return res.json();
+  },
+
+  // AI Assistant endpoints
+  async aiChat(data: AiChatRequest): Promise<AiDryRunResponse> {
+    const res = await fetch(`${API_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to chat with AI');
+    return res.json();
+  },
+
+  async aiConfirm(data: AiConfirmRequest): Promise<AiConfirmResponse> {
+    const res = await fetch(`${API_URL}/api/ai/confirm`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to confirm AI proposal');
     return res.json();
   },
 };

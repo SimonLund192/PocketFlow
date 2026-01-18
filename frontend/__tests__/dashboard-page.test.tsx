@@ -12,6 +12,8 @@ jest.mock("@/lib/api", () => ({
     getBudgetLifetimeStats: jest.fn(),
     getMonthlyStats: jest.fn(),
     getGoals: jest.fn(),
+    aiChat: jest.fn(),
+    aiConfirm: jest.fn(),
   },
 }));
 
