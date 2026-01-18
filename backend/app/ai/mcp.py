@@ -5,6 +5,13 @@ from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
 
 from app.auth import UserContext
 
+from .tools_budget import (
+    tool_create_budget_entry,
+    tool_create_goal_update,
+    tool_create_savings_entry,
+    tool_create_transaction,
+)
+
 
 ToolFunc = Callable[[UserContext, Dict[str, Any]], Awaitable[Any]]
 
@@ -77,6 +84,37 @@ def default_registry() -> McpToolRegistry:
             name="echo",
             description="Echo arguments back to the caller.",
             func=tool_echo,
+        )
+    )
+
+    # Budget-domain tools (US-AI-02). These are intentionally backend-only
+    # (no routes yet) and always scoped by UserContext.
+    registry.register(
+        ToolSpec(
+            name="create_transaction",
+            description="Create a transaction for the current user.",
+            func=tool_create_transaction,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="create_budget_entry",
+            description="Upsert a single budget item into a monthly budget bucket for the current user.",
+            func=tool_create_budget_entry,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="create_savings_entry",
+            description="Create a savings entry as an expense transaction (shared or personal).",
+            func=tool_create_savings_entry,
+        )
+    )
+    registry.register(
+        ToolSpec(
+            name="create_goal_update",
+            description="Update a goal owned by the current user.",
+            func=tool_create_goal_update,
         )
     )
     return registry

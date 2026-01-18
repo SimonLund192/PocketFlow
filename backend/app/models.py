@@ -238,3 +238,64 @@ class GoalUpdate(BaseModel):
 class GoalOrderItem(BaseModel):
     id: str
     order: int
+
+
+# ---- MCP tool input models (US-AI-02) ----
+
+
+class McpCreateTransactionInput(BaseModel):
+    """Validated inputs for MCP tool: create_transaction."""
+
+    type: TransactionType
+    category: TransactionCategory
+    amount: float = Field(..., gt=0)
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class SavingsKind(str, Enum):
+    SHARED = "shared"
+    PERSONAL = "personal"
+
+
+class McpCreateSavingsEntryInput(BaseModel):
+    """Validated inputs for MCP tool: create_savings_entry.
+
+    Savings are represented as expense transactions with category either
+    "Shared Savings" or "Personal Savings".
+    """
+
+    amount: float = Field(..., gt=0)
+    kind: SavingsKind = SavingsKind.SHARED
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class BudgetBucket(str, Enum):
+    INCOME_USER1 = "income_user1"
+    INCOME_USER2 = "income_user2"
+    SHARED_EXPENSES = "shared_expenses"
+    PERSONAL_USER1 = "personal_user1"
+    PERSONAL_USER2 = "personal_user2"
+    SHARED_SAVINGS = "shared_savings"
+    PERSONAL_SAVINGS_USER1 = "personal_savings_user1"
+    PERSONAL_SAVINGS_USER2 = "personal_savings_user2"
+
+
+class McpCreateBudgetEntryInput(BaseModel):
+    """Validated inputs for MCP tool: create_budget_entry.
+
+    Mirrors the existing stored budget document shape: a per-user, per-month
+    document with multiple arrays of BudgetItem.
+    """
+
+    month: str = Field(..., pattern=r"^\d{4}-\d{2}$")
+    bucket: BudgetBucket
+    item: BudgetItem
+
+
+class McpCreateGoalUpdateInput(BaseModel):
+    """Validated inputs for MCP tool: create_goal_update."""
+
+    goal_id: str
+    update: GoalUpdate
