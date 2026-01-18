@@ -12,8 +12,24 @@ jest.mock("@/contexts/AuthContext", () => ({
 import AnalyticsPage from "@/app/analytics/page";
 
 describe("Analytics page", () => {
-  it("renders heading", () => {
+  it("renders tabs and KPI cards when authenticated", () => {
     render(<AnalyticsPage />);
-    expect(screen.getByText("Analytics")).toBeInTheDocument();
+
+    // Tabs
+    expect(screen.getAllByText("Analytics")[0]).toBeInTheDocument();
+    expect(screen.getByText("Expenses")).toBeInTheDocument();
+    expect(screen.getByText("Income")).toBeInTheDocument();
+    expect(screen.getByText("Income vs Expenses")).toBeInTheDocument();
+    expect(screen.getByText("Balance")).toBeInTheDocument();
+    expect(screen.getByText("Transaction History")).toBeInTheDocument();
+
+    // KPI cards
+    expect(screen.getByText("Daily Average")).toBeInTheDocument();
+    expect(screen.getByText("Change")).toBeInTheDocument();
+    expect(screen.getByText("Total Transactions")).toBeInTheDocument();
+    expect(screen.getByText("Categories")).toBeInTheDocument();
+
+    // Chart section
+    expect(screen.getByText("Weekly Expenses")).toBeInTheDocument();
   });
 });
