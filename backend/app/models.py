@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -299,3 +299,36 @@ class McpCreateGoalUpdateInput(BaseModel):
 
     goal_id: str
     update: GoalUpdate
+
+
+# ---- LLM → MCP orchestration models (US-AI-03) ----
+
+
+class AiToolCall(BaseModel):
+    """A single tool invocation requested by the LLM."""
+
+    tool_name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AiToolCallPlan(BaseModel):
+    """Structured plan returned by the LLM.
+
+    Safety rules:
+    - The LLM must not perform writes directly; only tools do.
+    - By default, plans require explicit confirmation before execution.
+    """
+
+    intent: str
+    steps: List[AiToolCall] = Field(default_factory=list)
+    requires_confirmation: bool = True
+    confirmation_message: Optional[str] = None
+
+
+class AiToolCallPlanResult(BaseModel):
+    """Result envelope for plan execution."""
+
+    status: str  # 'planned' | 'executed' | 'blocked' | 'failed'
+    plan: AiToolCallPlan
+    results: List[Any] = Field(default_factory=list)
+    error: Optional[str] = None
