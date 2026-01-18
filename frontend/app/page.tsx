@@ -7,6 +7,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { BalanceTrendsChart } from "@/components/dashboard/BalanceTrendsChart";
 import { ExpenseBreakdownChart } from "@/components/dashboard/ExpenseBreakdownChart";
 import { SavingsTrendsChart } from "@/components/dashboard/SavingsTrendsChart";
+import { AIAssistantPanel } from "@/components/ai/AIAssistantPanel";
 import { Facebook, Twitter, Linkedin, Youtube } from "lucide-react";
 
 interface DashboardData {
@@ -215,8 +216,13 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-3 gap-8">
-        <BalanceTrendsChart data={balanceTrends} />
-        <ExpenseBreakdownChart data={expenseBreakdown} />
+        <div className="col-span-2">
+          <div className="grid grid-cols-2 gap-8">
+            <BalanceTrendsChart data={balanceTrends} />
+            <ExpenseBreakdownChart data={expenseBreakdown} />
+          </div>
+        </div>
+        <AIAssistantPanel />
       </div>
 
       {/* Footer */}

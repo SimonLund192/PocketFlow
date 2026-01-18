@@ -33,3 +33,11 @@ describe("Analytics page", () => {
     expect(screen.getByText("Weekly Expenses")).toBeInTheDocument();
   });
 });
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(""),
+}));
