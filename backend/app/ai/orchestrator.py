@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 from fastapi import HTTPException, status
@@ -11,6 +11,7 @@ from app.models import AiToolCallPlan, AiToolCallPlanResult
 
 from .llm_client import LlmChatRequest, LlmMessage, LlmClient
 from .mcp import McpToolRegistry
+from .plan_store import InMemoryPlanStore, default_plan_store
 
 
 _BUDGET_DOMAIN_SYSTEM_PROMPT = """You are Pocketflow's budgeting assistant.
@@ -70,6 +71,55 @@ class LlmMcpOrchestrator:
 
     llm: LlmClient
     mcp: McpToolRegistry
+    plan_store: InMemoryPlanStore = field(default_factory=default_plan_store)
+
+    def summarize_plan(self, plan: AiToolCallPlan) -> str:
+        """Human-readable summary for confirmation prompts.
+
+        We keep this conservative and step-based (rather than trying to infer
+        domain language). Tools can optionally provide richer descriptions later.
+        """
+
+        if not plan.steps:
+            return "I won't make any changes."
+
+        parts = []
+        for step in plan.steps:
+            args_preview = ", ".join(f"{k}={v!r}" for k, v in step.arguments.items())
+            if args_preview:
+                parts.append(f"- {step.tool_name}({args_preview})")
+            else:
+                parts.append(f"- {step.tool_name}()")
+
+        header = plan.confirmation_message or "I will apply the following changes:"
+        return "\n".join([header, *parts])
+
+    async def dry_run_from_text(self, *, ctx: UserContext, text: str) -> tuple[str, AiToolCallPlanResult]:
+        """Plan from text without executing any tools.
+
+        Stores the plan in a short-lived in-memory store and returns a plan_id
+        that must be confirmed to execute.
+        """
+
+        planned = await self.plan_from_text(ctx=ctx, text=text)
+        stored = self.plan_store.create(ctx=ctx, plan=planned.plan, user_text=text)
+
+        summary = self.summarize_plan(planned.plan)
+        # We embed the summary in the error field for now (the API route will
+        # return it separately).
+        return stored.id, AiToolCallPlanResult(status="planned", plan=planned.plan, results=[], error=summary)
+
+    async def confirm_and_execute(self, *, ctx: UserContext, plan_id: str) -> AiToolCallPlanResult:
+        stored = self.plan_store.get_for_user(ctx=ctx, plan_id=plan_id, consume=True)
+        if stored is None:
+            return AiToolCallPlanResult(
+                status="blocked",
+                plan=AiToolCallPlan(intent="unknown", steps=[]),
+                results=[],
+                error="Plan not found, expired, or not accessible.",
+            )
+
+        return await self.execute_plan(ctx=ctx, plan=stored.plan, confirmed=True)
 
     async def plan_from_text(self, *, ctx: UserContext, text: str) -> AiToolCallPlanResult:
         tools = _json_schema_for_tools(self.mcp)
@@ -100,15 +150,6 @@ class LlmMcpOrchestrator:
     ) -> AiToolCallPlanResult:
         # Safety invariant: never execute tools unless explicitly confirmed.
         if not confirmed:
-            return AiToolCallPlanResult(
-                status="blocked",
-                plan=plan,
-                results=[],
-                error=plan.confirmation_message
-                or "Confirmation required before executing this plan.",
-            )
-
-        if plan.requires_confirmation and not confirmed:
             return AiToolCallPlanResult(
                 status="blocked",
                 plan=plan,

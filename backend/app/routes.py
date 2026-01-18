@@ -13,6 +13,7 @@ from app.routes.dashboard import router as dashboard_router
 from app.routes.goals import router as goals_router
 from app.routes.transactions import router as transactions_router
 from app.routes.users import router as users_router
+from app.routes.ai import router as ai_router
 
 router = APIRouter()
 
@@ -22,3 +23,4 @@ router.include_router(transactions_router)
 router.include_router(dashboard_router)
 router.include_router(budgets_router)
 router.include_router(goals_router)
+router.include_router(ai_router)

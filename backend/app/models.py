@@ -332,3 +332,30 @@ class AiToolCallPlanResult(BaseModel):
     plan: AiToolCallPlan
     results: List[Any] = Field(default_factory=list)
     error: Optional[str] = None
+
+
+# ---- AI dry-run + confirmation models (US-AI-04) ----
+
+
+class AiDryRunRequest(BaseModel):
+    """User prompt to be planned (no execution)."""
+
+    text: str = Field(..., min_length=1)
+
+
+class AiDryRunResponse(BaseModel):
+    """Response from dry-run planning.
+
+    Includes a short-lived plan_id token that must be confirmed to execute.
+    """
+
+    status: str  # 'planned'
+    plan_id: str
+    plan: AiToolCallPlan
+    summary: str
+
+
+class AiConfirmRequest(BaseModel):
+    """Confirm execution of a previously planned dry-run."""
+
+    plan_id: str = Field(..., min_length=1)
