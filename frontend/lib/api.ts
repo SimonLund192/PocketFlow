@@ -6,8 +6,8 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('token');
 };
 
-// Dev-mode user context header used by user-scoped backend routes.
-// Stored by the DevUserSwitcher.
+// User context header used by user-scoped backend routes.
+// This is set to the authenticated user's id by AuthContext (auth always wins).
 export const getSelectedUserId = (): string | null => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('selected_user_id');

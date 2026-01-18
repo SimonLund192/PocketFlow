@@ -1,14 +1,16 @@
 "use client";
 
-import { Home, Target, Calculator, PieChart, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
+import { Home, Target, Calculator, Settings, HelpCircle, Link as LinkIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+
+import { AnalyticsIcon } from "@/components/icons/AnalyticsIcon";
 
 const navItems = [
   { icon: Home, label: "Dashboard", href: "/" },
   { icon: Calculator, label: "Budget", href: "/budget" },
   { icon: Target, label: "Goals", href: "/goals" },
-  { icon: PieChart, label: "Analytics", href: "/analytics" },
+  { icon: AnalyticsIcon, label: "Analytics", href: "/analytics" },
   { icon: LinkIcon, label: "Connections", href: "/connections" },
   { icon: Settings, label: "Settings", href: "/settings" },
   { icon: HelpCircle, label: "Help", href: "/help" },
