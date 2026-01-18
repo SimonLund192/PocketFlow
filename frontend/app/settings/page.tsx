@@ -60,6 +60,10 @@ function SettingsPageBody() {
   // Update URL when tab changes
   const handleTabChange = (value: string) => {
     setActiveTab(value);
+    if (value === "account") {
+      router.push("/settings", { scroll: false });
+      return;
+    }
     router.push(`/settings?tab=${value}`, { scroll: false });
   };
   

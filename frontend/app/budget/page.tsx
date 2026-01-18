@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Card } from "@/components/ui/card";
@@ -30,8 +30,28 @@ interface MonthData {
 }
 
 export default function BudgetPage() {
+  // Next.js requires `useSearchParams()` to be used within a Suspense boundary.
+  // We keep the existing Budget page logic by rendering a Suspense-wrapped body.
+  return (
+    <Suspense fallback={<BudgetPageFallback />}>
+      <BudgetPageBody />
+    </Suspense>
+  );
+}
+
+function BudgetPageFallback() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Budget</h1>
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </div>
+  );
+}
+
+function BudgetPageBody() {
   const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState("income");
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [showMonthDropdown, setShowMonthDropdown] = useState(false);
@@ -95,6 +115,23 @@ export default function BudgetPage() {
       setSelectedMonth(months[0].key);
     }
   }, []);
+
+  // Initialize active tab from URL parameter
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === "income") {
+      router.push("/budget", { scroll: false });
+      return;
+    }
+    router.push(`/budget?tab=${value}`, { scroll: false });
+  };
   
   // Income items - two columns for users
   const [incomeUser1, setIncomeUser1] = useState<BudgetItem[]>([{ id: "1", name: "", category: "", value: "", user: user1Name }]);
@@ -377,7 +414,7 @@ export default function BudgetPage() {
 
       {/* Tabs */}
       <Card className="p-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="income">Income</TabsTrigger>
             <TabsTrigger value="shared-expenses">Shared Expenses</TabsTrigger>

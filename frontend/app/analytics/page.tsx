@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { WeeklyExpensesChart } from "@/components/analytics/WeeklyExpensesChart";
@@ -8,13 +9,62 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AnalyticsPage() {
+	// Next.js requires `useSearchParams()` to be used within a Suspense boundary.
+	// We keep the page logic intact by rendering a Suspense-wrapped body.
+	return (
+		<Suspense fallback={<AnalyticsPageFallback />}>
+			<AnalyticsPageBody />
+		</Suspense>
+	);
+}
+
+function AnalyticsPageFallback() {
+	return (
+		<div className="space-y-4">
+			<div className="space-y-1">
+				<h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
+				<p className="text-sm text-muted-foreground">Loading…</p>
+			</div>
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+				{Array.from({ length: 4 }).map((_, i) => (
+					<Card key={i}>
+						<CardHeader className="space-y-2">
+							<div className="h-3 w-24 animate-pulse rounded bg-muted" />
+							<div className="h-7 w-20 animate-pulse rounded bg-muted" />
+							<div className="h-3 w-40 animate-pulse rounded bg-muted" />
+						</CardHeader>
+					</Card>
+				))}
+			</div>
+		</div>
+	);
+}
+
+function AnalyticsPageBody() {
 	const { isAuthenticated, isLoading } = useAuth();
+	const router = useRouter();
+	const searchParams = useSearchParams();
 	const [error, setError] = useState<string | null>(null);
+	const [activeTab, setActiveTab] = useState("analytics");
 
 	useEffect(() => {
 		// Placeholder for future analytics API calls.
 		// Keeping this page lightweight avoids regressions while we lock in routing.
 	}, []);
+
+	useEffect(() => {
+		const tabParam = searchParams.get("tab");
+		if (tabParam) setActiveTab(tabParam);
+	}, [searchParams]);
+
+	const handleTabChange = (value: string) => {
+		setActiveTab(value);
+		if (value === "analytics") {
+			router.push("/analytics", { scroll: false });
+			return;
+		}
+		router.push(`/analytics?tab=${value}`, { scroll: false });
+	};
 
 	if (isLoading) {
 		return (
@@ -56,7 +106,7 @@ export default function AnalyticsPage() {
 				</p>
 			</div>
 
-			<Tabs defaultValue="analytics" className="space-y-6">
+			<Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
 				<TabsList className="h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
 					<TabsTrigger value="analytics" className="rounded-full">
 						Analytics
