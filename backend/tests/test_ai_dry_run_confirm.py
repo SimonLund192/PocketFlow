@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from app.database import get_database
 
 from app.ai.mcp import McpToolRegistry, ToolSpec
 from app.ai.orchestrator import LlmMcpOrchestrator
@@ -50,6 +51,57 @@ async def test_dry_run_returns_plan_and_does_not_execute() -> None:
 	assert plan_id
 	assert calls == []
 	assert "create_budget_entry" in (res.error or "")
+
+
+@pytest.mark.asyncio
+async def test_ai_chat_endpoint_returns_proposal_and_confirm_writes(client) -> None:
+	"""Integration: /api/ai/chat -> planned, /api/ai/confirm -> writes."""
+	# Use the deterministic stub LLM (wired in routes) which returns a plan.
+	# We don't assert the exact plan (it's stub-defined), only the shape.
+	res = await client.post(
+		"/api/ai/chat",
+		json={"text": "Add rent 9000"},
+		headers={"X-User-Id": "user-a"},
+	)
+	assert res.status_code == 200
+	data = res.json()
+	assert data["status"] == "planned"
+	assert data["plan_id"]
+	assert "plan" in data
+	assert "summary" in data
+
+	# Ensure chat didn't write anything.
+	db = get_database()
+	docs = await db.transactions.find({"user_id": "user-a"}).to_list(length=50)
+	assert docs == []
+
+	confirm = await client.post(
+		"/api/ai/confirm",
+		json={"plan_id": data["plan_id"]},
+		headers={"X-User-Id": "user-a"},
+	)
+	assert confirm.status_code == 200
+	out = confirm.json()
+	assert out["status"] == "executed"
+
+
+@pytest.mark.asyncio
+async def test_ai_confirm_isolation_user_cannot_confirm_other_users_plan(client) -> None:
+	res = await client.post(
+		"/api/ai/chat",
+		json={"text": "Add groceries 10"},
+		headers={"X-User-Id": "user-a"},
+	)
+	assert res.status_code == 200
+	plan_id = res.json()["plan_id"]
+
+	# Different user should not be able to confirm.
+	confirm = await client.post(
+		"/api/ai/confirm",
+		json={"plan_id": plan_id},
+		headers={"X-User-Id": "user-b"},
+	)
+	assert confirm.status_code in (404, 403)
 
 
 @pytest.mark.asyncio

@@ -12,8 +12,8 @@ from app.ai.orchestrator import LlmMcpOrchestrator
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-@router.post("/dry-run", response_model=AiDryRunResponse)
-async def ai_dry_run(payload: AiDryRunRequest, ctx: UserContext = Depends(get_user_context)):
+@router.post("/chat", response_model=AiDryRunResponse)
+async def ai_chat(payload: AiDryRunRequest, ctx: UserContext = Depends(get_user_context)):
 	orch = LlmMcpOrchestrator(llm=StubLlmClient(), mcp=default_registry())
 	plan_id, planned = await orch.dry_run_from_text(ctx=ctx, text=payload.text)
 
@@ -23,6 +23,12 @@ async def ai_dry_run(payload: AiDryRunRequest, ctx: UserContext = Depends(get_us
 		plan=planned.plan,
 		summary=planned.error or "",
 	)
+
+
+# Backwards-compatible alias (US-AI-04 naming)
+@router.post("/dry-run", response_model=AiDryRunResponse, include_in_schema=False)
+async def ai_dry_run(payload: AiDryRunRequest, ctx: UserContext = Depends(get_user_context)):
+	return await ai_chat(payload=payload, ctx=ctx)
 
 
 @router.post("/confirm", response_model=AiToolCallPlanResult)
