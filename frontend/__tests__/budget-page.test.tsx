@@ -26,6 +26,14 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+  }),
+  useSearchParams: () => new URLSearchParams(""),
+}));
+
 import { api } from "@/lib/api";
 import BudgetPage from "@/app/budget/page";
 

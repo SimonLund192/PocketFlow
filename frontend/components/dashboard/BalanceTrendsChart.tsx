@@ -9,16 +9,12 @@ interface BalanceTrendsChartProps {
 }
 
 export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
-  console.log("BalanceTrendsChart data:", data);
-  
   // Format data for the chart - show month/year for better readability
   const chartData = data.map(item => ({
     date: new Date(item.date).toLocaleDateString('da-DK', { month: 'short', year: 'numeric' }),
     "Shared Savings": item.shared_savings,
     "Personal Savings": item.personal_savings,
   }));
-
-  console.log("BalanceTrendsChart chartData:", chartData);
 
   // Calculate percentage change from start to end for shared savings
   const lastSharedSavings = data.length > 0 ? (data[data.length - 1]?.shared_savings ?? 0) : 0;
@@ -30,8 +26,6 @@ export function BalanceTrendsChart({ data }: BalanceTrendsChartProps) {
     : '0.00';
   
   const isPositive = parseFloat(percentChange) >= 0;
-
-  console.log("Last shared savings:", lastSharedSavings, "First shared savings:", firstSharedSavings, "Percent change:", percentChange);
 
   // Calculate total savings (shared + personal)
   const totalSavings = lastSharedSavings + lastPersonalSavings;

@@ -6,8 +6,8 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('token');
 };
 
-// Dev-mode user context header used by user-scoped backend routes.
-// Stored by the DevUserSwitcher.
+// User context header used by user-scoped backend routes.
+// This is set to the authenticated user's id by AuthContext (auth always wins).
 export const getSelectedUserId = (): string | null => {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('selected_user_id');
@@ -197,6 +197,41 @@ export interface GoalUpdate {
   target?: number;
   color?: string;
   order?: number;
+}
+
+export interface AiChatRequest {
+  text: string;
+}
+
+export interface AiToolCallPlanStep {
+  id: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface AiToolCallPlan {
+  steps: AiToolCallPlanStep[];
+}
+
+export interface AiDryRunResponse {
+  status: "planned";
+  plan_id: string;
+  summary: string;
+  plan: AiToolCallPlan;
+}
+
+export interface AiConfirmRequest {
+  plan_id: string;
+}
+
+export interface AiConfirmResponse {
+  status: "executed";
+  results: Array<{
+    step_id: string;
+    status: "success" | "error";
+    output?: unknown;
+    error?: string;
+  }>;
 }
 
 export const api = {
@@ -471,6 +506,27 @@ export const api = {
       method: 'DELETE',
     });
     if (!res.ok) throw new Error('Failed to clear all data');
+    return res.json();
+  },
+
+  // AI Assistant endpoints
+  async aiChat(data: AiChatRequest): Promise<AiDryRunResponse> {
+    const res = await fetch(`${API_URL}/api/ai/chat`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to chat with AI');
+    return res.json();
+  },
+
+  async aiConfirm(data: AiConfirmRequest): Promise<AiConfirmResponse> {
+    const res = await fetch(`${API_URL}/api/ai/confirm`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to confirm AI proposal');
     return res.json();
   },
 };

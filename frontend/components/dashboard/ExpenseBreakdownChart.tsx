@@ -18,7 +18,11 @@ export function ExpenseBreakdownChart({ data }: ExpenseBreakdownChartProps) {
         const cats = await api.getCategories();
         setCategories(cats);
       } catch (error) {
-        console.error('Failed to load categories:', error);
+        // Avoid noisy console output in tests; failing to load categories
+        // just means we render fallback icon/color.
+        if (process.env.NODE_ENV !== "test") {
+          console.error('Failed to load categories:', error);
+        }
       }
     };
     loadCategories();

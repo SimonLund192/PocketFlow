@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { api, User, LoginCredentials, RegisterData } from '@/lib/api';
+import { api, User, LoginCredentials, RegisterData, setSelectedUserId } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -26,9 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const currentUser = await api.getCurrentUser();
           setUser(currentUser);
+			  // Auth should always win for user scoping.
+			  setSelectedUserId(currentUser.id);
         } catch (error) {
           console.error('Failed to load user:', error);
           localStorage.removeItem('token');
+			  setSelectedUserId(null);
         }
       }
       setIsLoading(false);
@@ -42,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', tokenData.access_token);
     const currentUser = await api.getCurrentUser();
     setUser(currentUser);
+	setSelectedUserId(currentUser.id);
   };
 
   const register = async (data: RegisterData) => {
@@ -53,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem('token');
     setUser(null);
+	setSelectedUserId(null);
   };
 
   return (

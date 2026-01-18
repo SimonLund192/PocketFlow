@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -238,3 +238,124 @@ class GoalUpdate(BaseModel):
 class GoalOrderItem(BaseModel):
     id: str
     order: int
+
+
+# ---- MCP tool input models (US-AI-02) ----
+
+
+class McpCreateTransactionInput(BaseModel):
+    """Validated inputs for MCP tool: create_transaction."""
+
+    type: TransactionType
+    category: TransactionCategory
+    amount: float = Field(..., gt=0)
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class SavingsKind(str, Enum):
+    SHARED = "shared"
+    PERSONAL = "personal"
+
+
+class McpCreateSavingsEntryInput(BaseModel):
+    """Validated inputs for MCP tool: create_savings_entry.
+
+    Savings are represented as expense transactions with category either
+    "Shared Savings" or "Personal Savings".
+    """
+
+    amount: float = Field(..., gt=0)
+    kind: SavingsKind = SavingsKind.SHARED
+    description: Optional[str] = None
+    date: Optional[datetime] = None
+
+
+class BudgetBucket(str, Enum):
+    INCOME_USER1 = "income_user1"
+    INCOME_USER2 = "income_user2"
+    SHARED_EXPENSES = "shared_expenses"
+    PERSONAL_USER1 = "personal_user1"
+    PERSONAL_USER2 = "personal_user2"
+    SHARED_SAVINGS = "shared_savings"
+    PERSONAL_SAVINGS_USER1 = "personal_savings_user1"
+    PERSONAL_SAVINGS_USER2 = "personal_savings_user2"
+
+
+class McpCreateBudgetEntryInput(BaseModel):
+    """Validated inputs for MCP tool: create_budget_entry.
+
+    Mirrors the existing stored budget document shape: a per-user, per-month
+    document with multiple arrays of BudgetItem.
+    """
+
+    month: str = Field(..., pattern=r"^\d{4}-\d{2}$")
+    bucket: BudgetBucket
+    item: BudgetItem
+
+
+class McpCreateGoalUpdateInput(BaseModel):
+    """Validated inputs for MCP tool: create_goal_update."""
+
+    goal_id: str
+    update: GoalUpdate
+
+
+# ---- LLM → MCP orchestration models (US-AI-03) ----
+
+
+class AiToolCall(BaseModel):
+    """A single tool invocation requested by the LLM."""
+
+    tool_name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AiToolCallPlan(BaseModel):
+    """Structured plan returned by the LLM.
+
+    Safety rules:
+    - The LLM must not perform writes directly; only tools do.
+    - By default, plans require explicit confirmation before execution.
+    """
+
+    intent: str
+    steps: List[AiToolCall] = Field(default_factory=list)
+    requires_confirmation: bool = True
+    confirmation_message: Optional[str] = None
+
+
+class AiToolCallPlanResult(BaseModel):
+    """Result envelope for plan execution."""
+
+    status: str  # 'planned' | 'executed' | 'blocked' | 'failed'
+    plan: AiToolCallPlan
+    results: List[Any] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+# ---- AI dry-run + confirmation models (US-AI-04) ----
+
+
+class AiDryRunRequest(BaseModel):
+    """User prompt to be planned (no execution)."""
+
+    text: str = Field(..., min_length=1)
+
+
+class AiDryRunResponse(BaseModel):
+    """Response from dry-run planning.
+
+    Includes a short-lived plan_id token that must be confirmed to execute.
+    """
+
+    status: str  # 'planned'
+    plan_id: str
+    plan: AiToolCallPlan
+    summary: str
+
+
+class AiConfirmRequest(BaseModel):
+    """Confirm execution of a previously planned dry-run."""
+
+    plan_id: str = Field(..., min_length=1)

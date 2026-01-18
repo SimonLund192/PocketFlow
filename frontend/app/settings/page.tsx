@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,11 +25,30 @@ interface Category {
 }
 
 export default function SettingsPage() {
+  // Next.js requires `useSearchParams()` to be used within a Suspense boundary.
+  // We keep the Settings page structure intact by rendering a Suspense-wrapped body.
+  return (
+    <Suspense fallback={<SettingsPageFallback />}>
+      <SettingsPageBody />
+    </Suspense>
+  );
+}
+
+function SettingsPageFallback() {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold">Settings</h1>
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </div>
+  );
+}
+
+function SettingsPageBody() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("account");
-  
+
   // Initialize activeTab from URL parameter on mount
   useEffect(() => {
     const tabParam = searchParams.get('tab');
@@ -37,10 +56,14 @@ export default function SettingsPage() {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
-  
+
   // Update URL when tab changes
   const handleTabChange = (value: string) => {
     setActiveTab(value);
+    if (value === "account") {
+      router.push("/settings", { scroll: false });
+      return;
+    }
     router.push(`/settings?tab=${value}`, { scroll: false });
   };
   
@@ -150,13 +173,6 @@ export default function SettingsPage() {
 
   const [savingsCategories, setSavingsCategories] = useState<Category[]>([]);
 
-  // Load categories from database
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadCategories();
-    }
-  }, [isAuthenticated]);
-
   const loadCategories = async () => {
     try {
       const categories = await api.getCategories();
@@ -167,6 +183,13 @@ export default function SettingsPage() {
       console.error('Failed to load categories:', error);
     }
   };
+
+  // Load categories from database
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadCategories();
+    }
+  }, [isAuthenticated]);
 
   const tabs = [
     { id: "account", label: "Account" },
