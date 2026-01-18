@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiUpdatedAt, setAiUpdatedAt] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     if (authLoading) return;
@@ -117,6 +118,12 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!aiUpdatedAt) return;
+    const t = setTimeout(() => setAiUpdatedAt(null), 5000);
+    return () => clearTimeout(t);
+  }, [aiUpdatedAt]);
+
   const formatCurrency = (num: number) => {
     return new Intl.NumberFormat('da-DK', {
       style: 'currency',
@@ -188,6 +195,15 @@ export default function DashboardPage() {
         <span>Home</span>
         <span>/</span>
         <span className="text-gray-900 font-medium">Dashboard</span>
+
+        {aiUpdatedAt ? (
+          <span
+            data-testid="ai-updated-badge"
+            className="ml-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+          >
+            Updated via AI Assistant
+          </span>
+        ) : null}
       </div>
 
       {/* KPI Cards */}
@@ -230,7 +246,13 @@ export default function DashboardPage() {
             <ExpenseBreakdownChart data={expenseBreakdown} />
           </div>
         </div>
-        <AIAssistantPanel onConfirmed={fetchData} />
+        <AIAssistantPanel
+          onConfirmed={async () => {
+            // Refetch dashboard data so KPIs and charts reflect AI-confirmed changes.
+            await fetchData();
+            setAiUpdatedAt(Date.now());
+          }}
+        />
       </div>
 
       {/* Footer */}
