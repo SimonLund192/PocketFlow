@@ -1,7 +1,11 @@
-Personal Budget Tracker
+# Personal Budget Tracker
+
+![CI](https://github.com/SimonLund192/PocketFlow/workflows/CI/badge.svg)
+![Deploy](https://github.com/SimonLund192/PocketFlow/workflows/Deploy/badge.svg)
+
 A modern personal finance management application with a beautiful dashboard interface.
 
-Stack
+## Stack
 Frontend: Next.js 14, React, Tailwind CSS, shadcn/ui, Recharts
 Backend: FastAPI (Python), MongoDB
 Deployment: Docker & Docker Compose
