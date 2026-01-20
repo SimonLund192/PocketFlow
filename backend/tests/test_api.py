@@ -1,33 +1,28 @@
 import pytest
-from httpx import AsyncClient, ASGITransport
-from app.main import app
 
 
 @pytest.mark.asyncio
-async def test_root_endpoint():
+async def test_root_endpoint(async_client):
     """Test the root endpoint"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/")
+    response = await async_client.get("/")
     
     assert response.status_code == 200
     assert response.json() == {"message": "PocketFlow API is running"}
 
 
 @pytest.mark.asyncio
-async def test_health_endpoint():
+async def test_health_endpoint(async_client):
     """Test the health check endpoint"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/health")
+    response = await async_client.get("/health")
     
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
 
 @pytest.mark.asyncio
-async def test_dashboard_stats_endpoint():
+async def test_dashboard_stats_endpoint(async_client):
     """Test the dashboard stats endpoint"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/dashboard/stats")
+    response = await async_client.get("/api/dashboard/stats")
     
     assert response.status_code == 200
     data = response.json()
@@ -43,10 +38,9 @@ async def test_dashboard_stats_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_balance_trends_endpoint():
+async def test_balance_trends_endpoint(async_client):
     """Test the balance trends endpoint"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/dashboard/balance-trends")
+    response = await async_client.get("/api/dashboard/balance-trends")
     
     assert response.status_code == 200
     data = response.json()
@@ -62,10 +56,9 @@ async def test_balance_trends_endpoint():
 
 
 @pytest.mark.asyncio
-async def test_expense_breakdown_endpoint():
+async def test_expense_breakdown_endpoint(async_client):
     """Test the expense breakdown endpoint"""
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/dashboard/expense-breakdown")
+    response = await async_client.get("/api/dashboard/expense-breakdown")
     
     assert response.status_code == 200
     data = response.json()
