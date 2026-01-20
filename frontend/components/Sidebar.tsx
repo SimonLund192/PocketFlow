@@ -2,23 +2,23 @@
 
 import { 
   Home, 
-  Calendar, 
+  Calculator, 
   Target, 
-  Clock, 
-  Link2, 
   Settings, 
   HelpCircle,
+  BarChart3,
+  Database,
 } from "lucide-react";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
-  { icon: Calendar, label: "Budget", path: "/budget" },
+  { icon: Calculator, label: "Budget", path: "/budget" },
   { icon: Target, label: "Goals", path: "/goals" },
-  { icon: Clock, label: "History", path: "/history" },
-  { icon: Link2, label: "Integrations", path: "/integrations" },
-  { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: BarChart3, label: "Analytics", path: "/analytics" },
+  { icon: Database, label: "Database", path: "/database" },
+  { icon: Settings, label: "Account", path: "/account" },
   { icon: HelpCircle, label: "Help", path: "/help" },
 ];
 
