@@ -1,9 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Moon, Bell, Search, CheckCircle2, Shield, Play, Apple } from "lucide-react";
+import { Moon, Bell, Search, CheckCircle2, Shield, Play, Apple, GripVertical, Pencil, Trash2, DollarSign, Minus, Gamepad2, Receipt, Lightbulb, Heart } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+
+interface Category {
+  id: string;
+  name: string;
+  type: "income" | "expense";
+  icon: string;
+  color: string;
+}
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState("Account");
@@ -19,6 +27,25 @@ export default function Settings() {
   const [postCode, setPostCode] = useState("");
   const [country, setCountry] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+
+  // Categories tab state
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryType, setNewCategoryType] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("");
+
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([
+    { id: "1", name: "Income", type: "income", icon: "dollar", color: "bg-blue-500" },
+  ]);
+
+  const [expenseCategories, setExpenseCategories] = useState<Category[]>([
+    { id: "1", name: "Subscription", type: "expense", icon: "minus", color: "bg-pink-500" },
+    { id: "2", name: "Website", type: "expense", icon: "minus", color: "bg-pink-500" },
+    { id: "3", name: "Gaming", type: "expense", icon: "gamepad", color: "bg-pink-600" },
+    { id: "4", name: "Bil", type: "expense", icon: "receipt", color: "bg-red-500" },
+    { id: "5", name: "Forsikring", type: "expense", icon: "lightbulb", color: "bg-yellow-500" },
+    { id: "6", name: "Streaming", type: "expense", icon: "heart", color: "bg-pink-600" },
+  ]);
 
   const tabs = [
     "Account",
@@ -67,7 +94,7 @@ export default function Settings() {
 
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
-          <span>Home</span>
+          <span>Dashboard</span>
           <span>/</span>
           <span className="text-gray-900 font-medium">Account</span>
         </div>
@@ -400,6 +427,283 @@ export default function Settings() {
                   />
                 </div>
               </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Categories Tab */}
+        {activeTab === "Categories" && (
+          <div className="grid grid-cols-[480px_1fr] gap-6">
+            {/* Left Column - Create Category Form */}
+            <Card className="p-8 bg-white border border-gray-200 rounded-2xl h-fit">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">
+                Create a new categories
+              </h2>
+
+              {/* Name Input */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-blue-600 mb-3">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="category name"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
+                />
+              </div>
+
+              {/* Type Select */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold text-blue-600 mb-3">
+                  Type
+                </label>
+                <select
+                  value={newCategoryType}
+                  onChange={(e) => setNewCategoryType(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: "no-repeat",
+                    backgroundPosition: "right 1rem center",
+                  }}
+                >
+                  <option value="">Choose...</option>
+                  <option value="income">Income</option>
+                  <option value="expense">Expense</option>
+                </select>
+              </div>
+
+              {/* Icon and Color Row */}
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                {/* Icon Select */}
+                <div>
+                  <label className="block text-sm font-semibold text-blue-600 mb-3">
+                    Icon
+                  </label>
+                  <select
+                    value={newCategoryIcon}
+                    onChange={(e) => setNewCategoryIcon(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: "no-repeat",
+                      backgroundPosition: "right 1rem center",
+                    }}
+                  >
+                    <option value="">Choose...</option>
+                    <option value="dollar">Dollar</option>
+                    <option value="minus">Minus</option>
+                    <option value="gamepad">Gamepad</option>
+                    <option value="receipt">Receipt</option>
+                    <option value="lightbulb">Lightbulb</option>
+                    <option value="heart">Heart</option>
+                  </select>
+                </div>
+
+                {/* Color Select */}
+                <div>
+                  <label className="block text-sm font-semibold text-blue-600 mb-3">
+                    Color
+                  </label>
+                  <select
+                    value={newCategoryColor}
+                    onChange={(e) => setNewCategoryColor(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: "no-repeat",
+                      backgroundPosition: "right 1rem center",
+                    }}
+                  >
+                    <option value="">Choose...</option>
+                    <option value="blue">Blue</option>
+                    <option value="pink">Pink</option>
+                    <option value="red">Red</option>
+                    <option value="yellow">Yellow</option>
+                    <option value="green">Green</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Create Button */}
+              <Button className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-medium text-base">
+                Create new category
+              </Button>
+            </Card>
+
+            {/* Right Column - Category Lists */}
+            <div className="space-y-6">
+              {/* Income Categories */}
+              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">
+                  Income Categories
+                </h2>
+
+                <div className="space-y-3">
+                  {incomeCategories.map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                    >
+                      <GripVertical className="w-5 h-5 text-gray-400" />
+                      <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                        <DollarSign className="w-5 h-5" />
+                      </div>
+                      <span className="flex-1 text-gray-900 font-medium">
+                        {category.name}
+                      </span>
+                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <Pencil className="w-4 h-4 text-blue-600" />
+                      </button>
+                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Expense Categories */}
+              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">
+                  Expense Categories
+                </h2>
+
+                <div className="space-y-3">
+                  {expenseCategories.map((category) => {
+                    let IconComponent = Minus;
+                    if (category.icon === "gamepad") IconComponent = Gamepad2;
+                    if (category.icon === "receipt") IconComponent = Receipt;
+                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
+                    if (category.icon === "heart") IconComponent = Heart;
+
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400" />
+                        <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="flex-1 text-gray-900 font-medium">
+                          {category.name}
+                        </span>
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Tab */}
+        {activeTab === "Admin" && (
+          <div className="max-w-4xl">
+            {/* Warning Banner */}
+            <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 mb-8">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg
+                    className="w-6 h-6 text-red-600"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-900 mb-2">
+                    Database Administration
+                  </h3>
+                  <p className="text-sm text-red-700 flex items-center gap-2">
+                    <span className="font-bold">⚠</span>
+                    <span className="font-semibold">
+                      Danger Zone: These actions permanently delete data and cannot be undone!
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Clear All Transactions */}
+            <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Clear All Transactions
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                This will permanently delete all transaction records from the database. This includes all income and expense transactions created from the seed data or manually added.
+              </p>
+              <div className="mb-6">
+                <span className="text-sm text-gray-700">Collection: </span>
+                <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">
+                  transactions
+                </code>
+              </div>
+              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
+                Clear Transactions
+              </Button>
+            </Card>
+
+            {/* Clear All Budgets */}
+            <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Clear All Budgets
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                This will permanently delete all budget records from the database. This includes all monthly budgets with income, expenses, and savings data you've entered.
+              </p>
+              <div className="mb-6">
+                <span className="text-sm text-gray-700">Collection: </span>
+                <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono text-gray-800">
+                  budgets
+                </code>
+              </div>
+              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
+                Clear Budgets
+              </Button>
+            </Card>
+
+            {/* Clear ALL Data - Final Warning */}
+            <Card className="p-8 bg-white border-2 border-red-600 rounded-lg">
+              <div className="flex items-start gap-3 mb-4">
+                <svg
+                  className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <h3 className="text-xl font-bold text-red-900">
+                  Clear ALL Data
+                </h3>
+              </div>
+              <p className="text-sm text-red-700 font-semibold mb-6 flex items-start gap-2">
+                <span className="font-bold">⚠</span>
+                <span>
+                  EXTREME CAUTION: This will delete EVERYTHING from the database!
+                </span>
+              </p>
+              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
+                Clear ALL Data
+              </Button>
             </Card>
           </div>
         )}

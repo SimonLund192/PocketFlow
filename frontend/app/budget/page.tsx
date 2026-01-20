@@ -145,7 +145,7 @@ export default function BudgetPage() {
 
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
-          <span>Home</span>
+          <span>Dashboard</span>
           <span>/</span>
           <span className="text-gray-900 font-medium">Budget</span>
         </div>
