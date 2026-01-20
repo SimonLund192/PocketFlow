@@ -8,24 +8,23 @@ import {
   Link2, 
   Settings, 
   HelpCircle,
-  Moon,
-  Bell,
-  Search
 } from "lucide-react";
 import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 const navItems = [
-  { icon: Home, label: "Home", active: true },
-  { icon: Calendar, label: "Calendar", active: false },
-  { icon: Target, label: "Goals", active: false },
-  { icon: Clock, label: "History", active: false },
-  { icon: Link2, label: "Integrations", active: false },
-  { icon: Settings, label: "Settings", active: false },
-  { icon: HelpCircle, label: "Help", active: false },
+  { icon: Home, label: "Home", path: "/" },
+  { icon: Calendar, label: "Budget", path: "/budget" },
+  { icon: Target, label: "Goals", path: "/goals" },
+  { icon: Clock, label: "History", path: "/history" },
+  { icon: Link2, label: "Integrations", path: "/integrations" },
+  { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: HelpCircle, label: "Help", path: "/help" },
 ];
 
 export default function Sidebar() {
-  const [activeItem, setActiveItem] = useState("Home");
+  const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <div className="w-14 bg-indigo-600 flex flex-col items-center py-4 space-y-6">
@@ -40,17 +39,18 @@ export default function Sidebar() {
       <nav className="flex-1 flex flex-col items-center space-y-4">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = item.label === activeItem;
+          const isActive = pathname === item.path;
           return (
             <button
               key={item.label}
-              onClick={() => setActiveItem(item.label)}
+              onClick={() => router.push(item.path)}
               className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                 isActive
                   ? "bg-indigo-700 text-white"
                   : "text-indigo-200 hover:bg-indigo-700 hover:text-white"
               }`}
               aria-label={item.label}
+              title={item.label}
             >
               <Icon className="w-5 h-5" />
             </button>
