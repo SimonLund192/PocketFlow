@@ -39,8 +39,6 @@ export default function Dashboard() {
         
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
-          <span>Home</span>
-          <span>/</span>
           <span className="text-gray-900 font-medium">Dashboard</span>
         </div>
       </header>
