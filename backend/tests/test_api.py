@@ -1,12 +1,12 @@
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from app.main import app
 
 
 @pytest.mark.asyncio
 async def test_root_endpoint():
     """Test the root endpoint"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/")
     
     assert response.status_code == 200
@@ -16,7 +16,7 @@ async def test_root_endpoint():
 @pytest.mark.asyncio
 async def test_health_endpoint():
     """Test the health check endpoint"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/health")
     
     assert response.status_code == 200
@@ -26,7 +26,7 @@ async def test_health_endpoint():
 @pytest.mark.asyncio
 async def test_dashboard_stats_endpoint():
     """Test the dashboard stats endpoint"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/dashboard/stats")
     
     assert response.status_code == 200
@@ -45,7 +45,7 @@ async def test_dashboard_stats_endpoint():
 @pytest.mark.asyncio
 async def test_balance_trends_endpoint():
     """Test the balance trends endpoint"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/dashboard/balance-trends")
     
     assert response.status_code == 200
@@ -64,7 +64,7 @@ async def test_balance_trends_endpoint():
 @pytest.mark.asyncio
 async def test_expense_breakdown_endpoint():
     """Test the expense breakdown endpoint"""
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.get("/api/dashboard/expense-breakdown")
     
     assert response.status_code == 200
