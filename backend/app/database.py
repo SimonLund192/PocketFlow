@@ -10,6 +10,10 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "pocketflow")
 client = AsyncIOMotorClient(MONGODB_URL)
 database = client[DATABASE_NAME]
 
+async def get_database():
+    """Get database instance"""
+    return database
+
 # Collections
 transactions_collection = database.get_collection("transactions")
 goals_collection = database.get_collection("goals")
