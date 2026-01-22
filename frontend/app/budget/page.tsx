@@ -161,6 +161,11 @@ export default function BudgetPage() {
           category: item.category_id,
           amount: item.amount
         })));
+
+        // Note: Personal expenses will be loaded here once we add them
+        // For now, keeping them as empty arrays
+        setUser1PersonalExpenses([]);
+        setUser2PersonalExpenses([]);
       } catch (error) {
         console.error('Failed to load budget data:', error);
       } finally {
@@ -789,13 +794,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItemLocal(setUser1PersonalExpenses, item.id, "name", e.target.value)
+                            updateItem(setUser1PersonalExpenses, item.id, "name", e.target.value, "user1")
                           }
                           placeholder="Expense name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItemLocal(setUser1PersonalExpenses, item.id)}
+                          onClick={() => removeItem(setUser1PersonalExpenses, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -805,22 +810,20 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItemLocal(setUser1PersonalExpenses, item.id, "category", e.target.value)
+                            updateItem(setUser1PersonalExpenses, item.id, "category", e.target.value, "user1")
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="">Select Category</option>
-                          <option value="Shopping">Shopping</option>
-                          <option value="Entertainment">Entertainment</option>
-                          <option value="Food">Food</option>
-                          <option value="Transport">Transport</option>
-                          <option value="Other">Other</option>
+                          {expenseCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
                         </select>
                         <input
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItemLocal(setUser1PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItem(setUser1PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0, "user1")
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -829,7 +832,7 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItemLocal(setUser1PersonalExpenses)}
+                    onClick={() => addItem(setUser1PersonalExpenses, "user1", "")}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
@@ -847,13 +850,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItemLocal(setUser2PersonalExpenses, item.id, "name", e.target.value)
+                            updateItem(setUser2PersonalExpenses, item.id, "name", e.target.value, "user2")
                           }
                           placeholder="Expense name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItemLocal(setUser2PersonalExpenses, item.id)}
+                          onClick={() => removeItem(setUser2PersonalExpenses, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -863,22 +866,20 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItemLocal(setUser2PersonalExpenses, item.id, "category", e.target.value)
+                            updateItem(setUser2PersonalExpenses, item.id, "category", e.target.value, "user2")
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="">Select Category</option>
-                          <option value="Shopping">Shopping</option>
-                          <option value="Entertainment">Entertainment</option>
-                          <option value="Food">Food</option>
-                          <option value="Transport">Transport</option>
-                          <option value="Other">Other</option>
+                          {expenseCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
                         </select>
                         <input
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItemLocal(setUser2PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItem(setUser2PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0, "user2")
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -887,13 +888,65 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItemLocal(setUser2PersonalExpenses)}
+                    onClick={() => addItem(setUser2PersonalExpenses, "user2", "")}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
                     Add Item
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Save Budget Button for Personal Expenses Tab */}
+            {activeTab === "personal-expenses" && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={async () => {
+                    if (!currentBudget) {
+                      alert('No budget loaded. Please wait for the page to load.');
+                      return;
+                    }
+                    console.log('=== SAVING PERSONAL EXPENSES ===');
+                    let savedCount = 0;
+                    let errorCount = 0;
+                    
+                    // Save User 1 personal expenses
+                    for (const item of user1PersonalExpenses) {
+                      try {
+                        await saveItem(item, 'user1', setUser1PersonalExpenses);
+                        savedCount++;
+                      } catch (error) {
+                        console.error('Failed to save user1 personal expense:', item, error);
+                        errorCount++;
+                      }
+                    }
+                    
+                    // Save User 2 personal expenses
+                    for (const item of user2PersonalExpenses) {
+                      try {
+                        await saveItem(item, 'user2', setUser2PersonalExpenses);
+                        savedCount++;
+                      } catch (error) {
+                        console.error('Failed to save user2 personal expense:', item, error);
+                        errorCount++;
+                      }
+                    }
+                    
+                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+                    if (errorCount > 0) {
+                      alert(`Personal expenses saved with ${errorCount} errors. Check console for details.`);
+                    } else {
+                      alert(`Personal expenses saved successfully! ${savedCount} items saved.`);
+                    }
+                  }}
+                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
+                  </svg>
+                  Save Personal Expenses
+                </button>
               </div>
             )}
 
