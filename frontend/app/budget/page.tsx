@@ -8,10 +8,12 @@ import { categoriesApi, Category } from "@/lib/categories-api";
 import { getOrCreateBudget, Budget } from "@/lib/budgets-api";
 import { 
   getBudgetLineItems, 
+  getBudgetLineItemsByBudget,
   createBudgetLineItem, 
   updateBudgetLineItem, 
   deleteBudgetLineItem,
-  BudgetLineItem 
+  BudgetLineItem,
+  BudgetLineItemWithCategory
 } from "@/lib/budget-line-items-api";
 
 interface BudgetItem {
@@ -127,22 +129,40 @@ export default function BudgetPage() {
         console.log('Budget loaded:', budget);
         setCurrentBudget(budget);
 
-        // Load budget line items
+        // Load budget line items WITH category info
         console.log('Loading budget line items...');
-        const lineItems = await getBudgetLineItems(budget.id);
-        console.log('Loaded line items:', lineItems);
+        const lineItems = await getBudgetLineItemsByBudget(budget.id);
+        console.log('Loaded line items with categories:', lineItems);
         
         // Track all loaded items as created
         lineItems.forEach(item => createdItems.current.add(item.id));
         
-        // Separate line items by owner_slot and category type
-        const user1Income = lineItems.filter(item => item.owner_slot === 'user1');
-        const user2Income = lineItems.filter(item => item.owner_slot === 'user2');
-        const sharedExpenses = lineItems.filter(item => item.owner_slot === 'shared');
+        // Separate line items by owner_slot AND category type
+        const user1Income = lineItems.filter(item => 
+          item.owner_slot === 'user1' && item.category?.type === 'income'
+        );
+        const user2Income = lineItems.filter(item => 
+          item.owner_slot === 'user2' && item.category?.type === 'income'
+        );
+        const sharedExpenses = lineItems.filter(item => 
+          item.owner_slot === 'shared' && item.category?.type === 'expense'
+        );
+        const user1PersonalExp = lineItems.filter(item => 
+          item.owner_slot === 'user1' && item.category?.type === 'expense'
+        );
+        const user2PersonalExp = lineItems.filter(item => 
+          item.owner_slot === 'user2' && item.category?.type === 'expense'
+        );
+        const sharedSavings = lineItems.filter(item => 
+          item.owner_slot === 'shared' && item.category?.type === 'savings'
+        );
 
         console.log('User1 income items:', user1Income);
         console.log('User2 income items:', user2Income);
         console.log('Shared expense items:', sharedExpenses);
+        console.log('User1 personal expenses:', user1PersonalExp);
+        console.log('User2 personal expenses:', user2PersonalExp);
+        console.log('Shared savings items:', sharedSavings);
 
         // Convert BudgetLineItem to BudgetItem format
         setUser1IncomeItems(user1Income.map(item => ({
@@ -166,11 +186,26 @@ export default function BudgetPage() {
           amount: item.amount
         })));
 
-        // Note: For now, initializing personal expenses and savings as empty
-        // They will be saved with the same owner_slot distinction
-        setUser1PersonalExpenses([]);
-        setUser2PersonalExpenses([]);
-        setSharedSavingsItems([]);
+        setUser1PersonalExpenses(user1PersonalExp.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
+
+        setUser2PersonalExpenses(user2PersonalExp.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
+
+        setSharedSavingsItems(sharedSavings.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
       } catch (error) {
         console.error('Failed to load budget data:', error);
       } finally {

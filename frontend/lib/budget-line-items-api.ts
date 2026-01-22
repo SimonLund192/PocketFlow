@@ -16,6 +16,16 @@ export interface BudgetLineItem {
   updated_at: string;
 }
 
+export interface BudgetLineItemWithCategory extends BudgetLineItem {
+  category?: {
+    id: string;
+    name: string;
+    type: 'income' | 'expense' | 'savings';
+    icon: string;
+    color: string;
+  };
+}
+
 export interface BudgetLineItemCreate {
   budget_id: string;
   name: string;
@@ -73,7 +83,7 @@ export async function getBudgetLineItems(budgetId?: string): Promise<BudgetLineI
 /**
  * Get budget line items by budget ID (populated with category info)
  */
-export async function getBudgetLineItemsByBudget(budgetId: string): Promise<BudgetLineItem[]> {
+export async function getBudgetLineItemsByBudget(budgetId: string): Promise<BudgetLineItemWithCategory[]> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/budget/${budgetId}`, {
     method: 'GET',
     headers: buildHeaders(),
