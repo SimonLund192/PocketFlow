@@ -28,7 +28,7 @@ class PyObjectId(ObjectId):
 class TransactionBase(BaseModel):
     amount: float
     category: str
-    type: Literal["income", "expense", "savings"]
+    type: Literal["income", "expense", "savings", "fun"]
     description: Optional[str] = None
     date: datetime
 
@@ -114,9 +114,9 @@ class LegacyCategory(LegacyCategoryBase):
 class CategoryBase(BaseModel):
     """Base model for category data"""
     name: str = Field(..., min_length=1, max_length=100)
-    type: Literal["income", "expense", "savings"] = Field(
+    type: Literal["income", "expense", "savings", "fun"] = Field(
         ..., 
-        description="Category type: income, expense, or savings"
+        description="Category type: income, expense, savings, or fun"
     )
     icon: Optional[str] = Field(None, max_length=50)
     color: Optional[str] = Field(None, max_length=20)
@@ -130,7 +130,7 @@ class CategoryCreate(CategoryBase):
 class CategoryUpdate(BaseModel):
     """Model for updating a category (all fields optional)"""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    type: Optional[Literal["income", "expense", "savings"]] = None
+    type: Optional[Literal["income", "expense", "savings", "fun"]] = None
     icon: Optional[str] = Field(None, max_length=50)
     color: Optional[str] = Field(None, max_length=20)
 

@@ -20,7 +20,7 @@ export interface BudgetLineItemWithCategory extends BudgetLineItem {
   category?: {
     id: string;
     name: string;
-    type: 'income' | 'expense' | 'savings';
+    type: 'income' | 'expense' | 'savings' | 'fun';
     icon: string;
     color: string;
   };

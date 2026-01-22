@@ -247,6 +247,7 @@ export default function Settings() {
   const incomeCategories = categories.filter((c) => c.type === "income");
   const expenseCategories = categories.filter((c) => c.type === "expense");
   const savingsCategories = categories.filter((c) => c.type === "savings");
+  const funCategories = categories.filter((c) => c.type === "fun");
 
   const tabs = [
     "Account",
@@ -628,6 +629,7 @@ export default function Settings() {
                   <option value="income" className="text-gray-900">💰 Income</option>
                   <option value="expense" className="text-gray-900">💸 Expense</option>
                   <option value="savings" className="text-gray-900">🏦 Savings</option>
+                  <option value="fun" className="text-gray-900">🎉 Fun</option>
                 </select>
               </div>
 
@@ -898,6 +900,88 @@ export default function Settings() {
                     if (category.icon === "piggy-bank") IconComponent = PiggyBank;
                     if (category.icon === "landmark") IconComponent = Landmark;
                     if (category.icon === "heart") IconComponent = Heart;
+                    if (category.icon === "dollar") IconComponent = DollarSign;
+
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400" />
+                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="flex-1 text-gray-900 font-medium">
+                          {category.name}
+                        </span>
+                        <button
+                          onClick={() => handleStartEdit(category)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    );
+                  })
+                  )}
+                </div>
+              </Card>
+
+              {/* Fun Categories */}
+              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">
+                  Fun Categories
+                </h2>
+
+                <div className="space-y-3">
+                  {funCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No fun categories yet.</p>
+                      <p className="text-xs mt-1">Create one to get started!</p>
+                    </div>
+                  ) : (
+                    funCategories.map((category) => {
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
+                    let IconComponent = Gamepad2;
+                    if (category.icon === "gamepad") IconComponent = Gamepad2;
+                    if (category.icon === "heart") IconComponent = Heart;
+                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
+                    if (category.icon === "receipt") IconComponent = Receipt;
                     if (category.icon === "dollar") IconComponent = DollarSign;
 
                     if (isEditing) {

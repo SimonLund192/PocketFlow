@@ -4,21 +4,21 @@ export interface Category {
   id: string;  // Backend returns 'id', not '_id'
   user_id: string;
   name: string;
-  type: "income" | "expense" | "savings";
+  type: "income" | "expense" | "savings" | "fun";
   icon: string;
   color: string;
 }
 
 export interface CategoryCreate {
   name: string;
-  type: "income" | "expense" | "savings";
+  type: "income" | "expense" | "savings" | "fun";
   icon: string;
   color: string;
 }
 
 export interface CategoryUpdate {
   name?: string;
-  type?: "income" | "expense" | "savings";
+  type?: "income" | "expense" | "savings" | "fun";
   icon?: string;
   color?: string;
 }

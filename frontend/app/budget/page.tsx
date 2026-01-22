@@ -30,7 +30,7 @@ interface StatCardProps {
   trend?: "up" | "down" | "neutral";
 }
 
-type TabType = "income" | "shared-expenses" | "personal-expenses" | "shared-savings" | "personal";
+type TabType = "income" | "shared-expenses" | "personal-expenses" | "shared-savings" | "fun";
 
 function StatCard({ title, value, subtitle, trend }: StatCardProps) {
   const getTrendIcon = () => {
@@ -74,6 +74,7 @@ export default function BudgetPage() {
   const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
   const [savingsCategories, setSavingsCategories] = useState<Category[]>([]);
+  const [funCategories, setFunCategories] = useState<Category[]>([]);
   const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -99,12 +100,15 @@ export default function BudgetPage() {
         const incomeOnly = allCategories.filter(cat => cat.type === 'income');
         const expenseOnly = allCategories.filter(cat => cat.type === 'expense');
         const savingsOnly = allCategories.filter(cat => cat.type === 'savings');
+        const funOnly = allCategories.filter(cat => cat.type === 'fun');
         console.log('Income categories:', incomeOnly);
         console.log('Expense categories:', expenseOnly);
         console.log('Savings categories:', savingsOnly);
+        console.log('Fun categories:', funOnly);
         setIncomeCategories(incomeOnly);
         setExpenseCategories(expenseOnly);
         setSavingsCategories(savingsOnly);
+        setFunCategories(funOnly);
       } catch (error) {
         console.error('Failed to load categories:', error);
       }
@@ -156,6 +160,9 @@ export default function BudgetPage() {
         const sharedSavings = lineItems.filter(item => 
           item.owner_slot === 'shared' && item.category?.type === 'savings'
         );
+        const sharedFun = lineItems.filter(item => 
+          item.owner_slot === 'shared' && item.category?.type === 'fun'
+        );
 
         console.log('User1 income items:', user1Income);
         console.log('User2 income items:', user2Income);
@@ -163,6 +170,7 @@ export default function BudgetPage() {
         console.log('User1 personal expenses:', user1PersonalExp);
         console.log('User2 personal expenses:', user2PersonalExp);
         console.log('Shared savings items:', sharedSavings);
+        console.log('Shared fun items:', sharedFun);
 
         // Convert BudgetLineItem to BudgetItem format
         setUser1IncomeItems(user1Income.map(item => ({
@@ -206,6 +214,13 @@ export default function BudgetPage() {
           category: item.category_id,
           amount: item.amount
         })));
+
+        setSharedFunItems(sharedFun.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
       } catch (error) {
         console.error('Failed to load budget data:', error);
       } finally {
@@ -235,6 +250,9 @@ export default function BudgetPage() {
 
   // Shared Savings
   const [sharedSavingsItems, setSharedSavingsItems] = useState<BudgetItem[]>([]);
+
+  // Fun items (shared)
+  const [sharedFunItems, setSharedFunItems] = useState<BudgetItem[]>([]);
 
   // Personal Savings
   const [user1PersonalItems, setUser1PersonalItems] = useState<BudgetItem[]>([]);
@@ -490,14 +508,15 @@ export default function BudgetPage() {
     user1PersonalExpenses.reduce((sum, item) => sum + item.amount, 0) +
     user2PersonalExpenses.reduce((sum, item) => sum + item.amount, 0);
   const sharedSavingsTotal = sharedSavingsItems.reduce((sum, item) => sum + item.amount, 0);
-  const remaining = totalIncome - sharedExpensesTotal - personalExpensesTotal - sharedSavingsTotal;
+  const sharedFunTotal = sharedFunItems.reduce((sum, item) => sum + item.amount, 0);
+  const remaining = totalIncome - sharedExpensesTotal - personalExpensesTotal - sharedSavingsTotal - sharedFunTotal;
 
   const tabs = [
     { id: "income" as TabType, label: "Income" },
     { id: "shared-expenses" as TabType, label: "Shared Expenses" },
     { id: "personal-expenses" as TabType, label: "Personal Expenses" },
     { id: "shared-savings" as TabType, label: "Shared Savings" },
-    { id: "personal" as TabType, label: "Fun" },
+    { id: "fun" as TabType, label: "Fun" },
   ];
 
   return (
@@ -519,7 +538,7 @@ export default function BudgetPage() {
       {/* Main Content */}
       <div className="p-8">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
           <StatCard
             title="TOTAL INCOME"
             value={`${totalIncome.toLocaleString()} kr.`}
@@ -539,14 +558,20 @@ export default function BudgetPage() {
             trend="down"
           />
           <StatCard
-            title="REMAINING"
-            value={`${remaining.toLocaleString()} kr.`}
+            title="SHARED SAVINGS"
+            value={`${sharedSavingsTotal.toLocaleString()} kr.`}
             subtitle="Last month"
             trend="up"
           />
           <StatCard
-            title="SHARED SAVINGS"
-            value={`${sharedSavingsTotal.toLocaleString()} kr.`}
+            title="FUN SPENDING"
+            value={`${sharedFunTotal.toLocaleString()} kr.`}
+            subtitle="Last month"
+            trend="neutral"
+          />
+          <StatCard
+            title="REMAINING"
+            value={`${remaining.toLocaleString()} kr.`}
             subtitle="Last month"
             trend="up"
           />
@@ -1086,120 +1111,97 @@ export default function BudgetPage() {
               </div>
             )}
 
-            {/* Personal Tab */}
-            {activeTab === "personal" && (
-              <div className="grid grid-cols-2 gap-8">
-                {/* User 1 Personal */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">{user1Name}</h4>
-                  {user1PersonalItems.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItemLocal(setUser1PersonalItems, item.id, "name", e.target.value)
-                          }
-                          placeholder="Item name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItemLocal(setUser1PersonalItems, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItemLocal(setUser1PersonalItems, item.id, "category", e.target.value)
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          <option value="Savings">Savings</option>
-                          <option value="Investment">Investment</option>
-                          <option value="Other">Other</option>
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItemLocal(setUser1PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
+            {/* Fun Tab */}
+            {activeTab === "fun" && (
+              <div className="space-y-4">
+                <h4 className="text-lg font-semibold text-gray-900 mb-4">Shared Fun Spending</h4>
+                {sharedFunItems.map((item) => (
+                  <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) =>
+                          updateItem(setSharedFunItems, item.id, "name", e.target.value, "shared")
+                        }
+                        placeholder="Item name"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        onClick={() => removeItem(setSharedFunItems, item.id)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4 text-gray-400" />
+                      </button>
                     </div>
-                  ))}
-                  <button
-                    onClick={() => addItemLocal(setUser1PersonalItems)}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select
+                        value={item.category}
+                        onChange={(e) =>
+                          updateItem(setSharedFunItems, item.id, "category", e.target.value, "shared")
+                        }
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value="">Select Category</option>
+                        {funCategories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) =>
+                          updateItem(setSharedFunItems, item.id, "amount", parseFloat(e.target.value) || 0, "shared")
+                        }
+                        placeholder="Amount"
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={() => addItem(setSharedFunItems, "shared", "")}
+                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Fun Item
+                </button>
+              </div>
+            )}
 
-                {/* User 2 Personal */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">{user2Name}</h4>
-                  {user2PersonalItems.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItemLocal(setUser2PersonalItems, item.id, "name", e.target.value)
-                          }
-                          placeholder="Item name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItemLocal(setUser2PersonalItems, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItemLocal(setUser2PersonalItems, item.id, "category", e.target.value)
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          <option value="Savings">Savings</option>
-                          <option value="Investment">Investment</option>
-                          <option value="Other">Other</option>
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItemLocal(setUser2PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => addItemLocal(setUser2PersonalItems)}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
+            {/* Save Button for Fun Tab */}
+            {activeTab === "fun" && (
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={async () => {
+                    console.log('=== SAVE FUN ITEMS CLICKED ===');
+                    let savedCount = 0;
+                    let errorCount = 0;
+                    for (const item of sharedFunItems) {
+                      try {
+                        await saveItem(item, 'shared', setSharedFunItems);
+                        savedCount++;
+                      } catch (error) {
+                        console.error('Failed to save fun item:', item, error);
+                        errorCount++;
+                      }
+                    }
+                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+                    if (errorCount > 0) {
+                      alert(`Fun items saved with ${errorCount} errors. Check console for details.`);
+                    } else {
+                      alert(`Fun items saved successfully! ${savedCount} items saved.`);
+                    }
+                  }}
+                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
+                  </svg>
+                  Save Fun Items
+                </button>
               </div>
             )}
           </div>
