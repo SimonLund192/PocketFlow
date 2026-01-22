@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import Tabs from "@/components/Tabs";
 import { categoriesApi, Category } from "@/lib/categories-api";
+import { adminApi } from "@/lib/admin-api";
 
 interface EditingCategory {
   id: string;
@@ -57,6 +58,11 @@ export default function Settings() {
   const [newCategoryColor, setNewCategoryColor] = useState("");
   const [creatingCategory, setCreatingCategory] = useState(false);
 
+  // Admin tab state
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
   // Fetch categories on mount
   useEffect(() => {
     if (activeTab === "Categories") {
@@ -86,6 +92,7 @@ export default function Settings() {
     try {
       setCreatingCategory(true);
       setCategoriesError(null);
+      setEditingCategory(null); // Clear any editing state
       const newCategory = await categoriesApi.create({
         name: newCategoryName,
         type: newCategoryType as Category["type"],
@@ -113,7 +120,7 @@ export default function Settings() {
     try {
       setCategoriesError(null);
       await categoriesApi.delete(categoryId);
-      setCategories(categories.filter((c) => c._id !== categoryId));
+      setCategories(categories.filter((c) => c.id !== categoryId));
     } catch (error) {
       setCategoriesError(error instanceof Error ? error.message : "Failed to delete category");
     }
@@ -121,7 +128,7 @@ export default function Settings() {
 
   const handleStartEdit = (category: Category) => {
     setEditingCategory({
-      id: category._id,
+      id: category.id,
       name: category.name,
       type: category.type,
       icon: category.icon,
@@ -140,7 +147,7 @@ export default function Settings() {
         icon: editingCategory.icon,
         color: editingCategory.color,
       });
-      setCategories(categories.map((c) => (c._id === editingCategory.id ? updated : c)));
+      setCategories(categories.map((c) => (c.id === editingCategory.id ? updated : c)));
       setEditingCategory(null);
     } catch (error) {
       setCategoriesError(error instanceof Error ? error.message : "Failed to update category");
@@ -149,6 +156,73 @@ export default function Settings() {
 
   const handleCancelEdit = () => {
     setEditingCategory(null);
+  };
+
+  // Admin handlers
+  const handleClearTransactions = async () => {
+    if (!confirm("Are you sure you want to delete ALL transactions? This cannot be undone!")) {
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearTransactions();
+      setAdminMessage(result.message);
+      setTimeout(() => setAdminMessage(null), 5000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear transactions");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleClearBudgets = async () => {
+    if (!confirm("Are you sure you want to delete ALL budgets? This cannot be undone!")) {
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearBudgets();
+      setAdminMessage(result.message);
+      setTimeout(() => setAdminMessage(null), 5000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear budgets");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    const firstConfirm = confirm(
+      "⚠️ WARNING ⚠️\n\nThis will delete ALL your data including:\n- Transactions\n- Budgets\n- Categories\n- Goals\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?"
+    );
+    
+    if (!firstConfirm) return;
+
+    const secondConfirm = confirm(
+      "⚠️ FINAL WARNING ⚠️\n\nThis is your last chance to cancel.\n\nClick OK to permanently delete ALL data."
+    );
+
+    if (!secondConfirm) return;
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearAllData();
+      setAdminMessage(`✅ ${result.message}`);
+      // Reload categories if on Categories tab
+      if (activeTab === "Categories") {
+        loadCategories();
+      }
+      setTimeout(() => setAdminMessage(null), 8000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear all data");
+    } finally {
+      setAdminLoading(false);
+    }
   };
 
   // Separate categories by type
@@ -638,7 +712,7 @@ export default function Settings() {
                     </div>
                   ) : (
                     incomeCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category._id;
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
                     let IconComponent = DollarSign;
                     if (category.icon === "minus") IconComponent = Minus;
                     if (category.icon === "gamepad") IconComponent = Gamepad2;
@@ -649,14 +723,14 @@ export default function Settings() {
                     if (isEditing) {
                       return (
                         <div
-                          key={category._id}
+                          key={category.id}
                           className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
                         >
                           <GripVertical className="w-5 h-5 text-gray-400" />
                           <input
                             type="text"
-                            value={editingCategory.name}
-                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                           <button
@@ -677,7 +751,7 @@ export default function Settings() {
 
                     return (
                       <div
-                        key={category._id}
+                        key={category.id}
                         className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
                       >
                         <GripVertical className="w-5 h-5 text-gray-400" />
@@ -694,7 +768,7 @@ export default function Settings() {
                           <Pencil className="w-4 h-4 text-blue-600" />
                         </button>
                         <button
-                          onClick={() => handleDeleteCategory(category._id)}
+                          onClick={() => handleDeleteCategory(category.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
@@ -720,7 +794,7 @@ export default function Settings() {
                     </div>
                   ) : (
                     expenseCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category._id;
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
                     let IconComponent = Minus;
                     if (category.icon === "gamepad") IconComponent = Gamepad2;
                     if (category.icon === "receipt") IconComponent = Receipt;
@@ -731,14 +805,14 @@ export default function Settings() {
                     if (isEditing) {
                       return (
                         <div
-                          key={category._id}
+                          key={category.id}
                           className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
                         >
                           <GripVertical className="w-5 h-5 text-gray-400" />
                           <input
                             type="text"
-                            value={editingCategory.name}
-                            onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
                             className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                           <button
@@ -759,7 +833,7 @@ export default function Settings() {
 
                     return (
                       <div
-                        key={category._id}
+                        key={category.id}
                         className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
                       >
                         <GripVertical className="w-5 h-5 text-gray-400" />
@@ -776,7 +850,7 @@ export default function Settings() {
                           <Pencil className="w-4 h-4 text-blue-600" />
                         </button>
                         <button
-                          onClick={() => handleDeleteCategory(category._id)}
+                          onClick={() => handleDeleteCategory(category.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
@@ -826,6 +900,18 @@ export default function Settings() {
               </div>
             </div>
 
+            {/* Success/Error Messages */}
+            {adminMessage && (
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-green-800 font-medium">{adminMessage}</p>
+              </div>
+            )}
+            {adminError && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-800 font-medium">{adminError}</p>
+              </div>
+            )}
+
             {/* Clear All Transactions */}
             <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">
               <h3 className="text-xl font-bold text-gray-900 mb-3">
@@ -840,8 +926,12 @@ export default function Settings() {
                   transactions
                 </code>
               </div>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear Transactions
+              <Button 
+                onClick={handleClearTransactions}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear Transactions"}
               </Button>
             </Card>
 
@@ -859,8 +949,12 @@ export default function Settings() {
                   budgets
                 </code>
               </div>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear Budgets
+              <Button 
+                onClick={handleClearBudgets}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear Budgets"}
               </Button>
             </Card>
 
@@ -885,11 +979,15 @@ export default function Settings() {
               <p className="text-sm text-red-700 font-semibold mb-6 flex items-start gap-2">
                 <span className="font-bold">⚠</span>
                 <span>
-                  EXTREME CAUTION: This will delete EVERYTHING from the database!
+                  EXTREME CAUTION: This will delete EVERYTHING from the database including transactions, budgets, categories, and goals!
                 </span>
               </p>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear ALL Data
+              <Button 
+                onClick={handleClearAllData}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear ALL Data"}
               </Button>
             </Card>
           </div>

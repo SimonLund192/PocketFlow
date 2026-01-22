@@ -41,12 +41,16 @@ class CategoryService:
             )
         
         # Create category document
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
         category_doc = CategoryInDB(
             user_id=user_id,
             name=data.name,
             type=data.type,
             icon=data.icon,
-            color=data.color
+            color=data.color,
+            created_at=now,
+            updated_at=now
         )
         
         # Insert into database
@@ -242,6 +246,8 @@ class CategoryService:
     @staticmethod
     def _to_response(category_doc: dict) -> CategoryResponse:
         """Convert MongoDB document to CategoryResponse"""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
         return CategoryResponse(
             id=str(category_doc["_id"]),
             user_id=category_doc["user_id"],
@@ -249,6 +255,6 @@ class CategoryService:
             type=category_doc["type"],
             icon=category_doc.get("icon"),
             color=category_doc.get("color"),
-            created_at=category_doc["created_at"],
-            updated_at=category_doc["updated_at"]
+            created_at=category_doc.get("created_at", now),
+            updated_at=category_doc.get("updated_at", now)
         )
