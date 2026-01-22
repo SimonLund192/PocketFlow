@@ -71,6 +71,7 @@ export default function BudgetPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
+  const [savingsCategories, setSavingsCategories] = useState<Category[]>([]);
   const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -95,10 +96,13 @@ export default function BudgetPage() {
         setCategories(allCategories);
         const incomeOnly = allCategories.filter(cat => cat.type === 'income');
         const expenseOnly = allCategories.filter(cat => cat.type === 'expense');
+        const savingsOnly = allCategories.filter(cat => cat.type === 'savings');
         console.log('Income categories:', incomeOnly);
         console.log('Expense categories:', expenseOnly);
+        console.log('Savings categories:', savingsOnly);
         setIncomeCategories(incomeOnly);
         setExpenseCategories(expenseOnly);
+        setSavingsCategories(savingsOnly);
       } catch (error) {
         console.error('Failed to load categories:', error);
       }
@@ -162,10 +166,11 @@ export default function BudgetPage() {
           amount: item.amount
         })));
 
-        // Note: Personal expenses will be loaded here once we add them
-        // For now, keeping them as empty arrays
+        // Note: For now, initializing personal expenses and savings as empty
+        // They will be saved with the same owner_slot distinction
         setUser1PersonalExpenses([]);
         setUser2PersonalExpenses([]);
+        setSharedSavingsItems([]);
       } catch (error) {
         console.error('Failed to load budget data:', error);
       } finally {
@@ -961,13 +966,13 @@ export default function BudgetPage() {
                         type="text"
                         value={item.name}
                         onChange={(e) =>
-                          updateItemLocal(setSharedSavingsItems, item.id, "name", e.target.value)
+                          updateItem(setSharedSavingsItems, item.id, "name", e.target.value, "shared")
                         }
                         placeholder="Savings goal name"
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <button
-                        onClick={() => removeItemLocal(setSharedSavingsItems, item.id)}
+                        onClick={() => removeItem(setSharedSavingsItems, item.id)}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4 text-gray-400" />
@@ -977,21 +982,20 @@ export default function BudgetPage() {
                       <select
                         value={item.category}
                         onChange={(e) =>
-                          updateItemLocal(setSharedSavingsItems, item.id, "category", e.target.value)
+                          updateItem(setSharedSavingsItems, item.id, "category", e.target.value, "shared")
                         }
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
                         <option value="">Select Category</option>
-                        <option value="Emergency Fund">Emergency Fund</option>
-                        <option value="Vacation">Vacation</option>
-                        <option value="Investment">Investment</option>
-                        <option value="Other">Other</option>
+                        {savingsCategories.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
                       </select>
                       <input
                         type="number"
                         value={item.amount}
                         onChange={(e) =>
-                          updateItemLocal(setSharedSavingsItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                          updateItem(setSharedSavingsItems, item.id, "amount", parseFloat(e.target.value) || 0, "shared")
                         }
                         placeholder="Amount"
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1000,11 +1004,49 @@ export default function BudgetPage() {
                   </div>
                 ))}
                 <button
-                  onClick={() => addItemLocal(setSharedSavingsItems)}
+                  onClick={() => addItem(setSharedSavingsItems, "shared", "")}
                   className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                 >
                   <Plus className="w-4 h-4" />
                   Add Savings Goal
+                </button>
+              </div>
+            )}
+
+            {/* Save Budget Button for Shared Savings Tab */}
+            {activeTab === "shared-savings" && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={async () => {
+                    if (!currentBudget) {
+                      alert('No budget loaded. Please wait for the page to load.');
+                      return;
+                    }
+                    console.log('=== SAVING SHARED SAVINGS ===');
+                    let savedCount = 0;
+                    let errorCount = 0;
+                    for (const item of sharedSavingsItems) {
+                      try {
+                        await saveItem(item, 'shared', setSharedSavingsItems);
+                        savedCount++;
+                      } catch (error) {
+                        console.error('Failed to save shared savings:', item, error);
+                        errorCount++;
+                      }
+                    }
+                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+                    if (errorCount > 0) {
+                      alert(`Shared savings saved with ${errorCount} errors. Check console for details.`);
+                    } else {
+                      alert(`Shared savings saved successfully! ${savedCount} items saved.`);
+                    }
+                  }}
+                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
+                  </svg>
+                  Save Shared Savings
                 </button>
               </div>
             )}
