@@ -1114,7 +1114,7 @@ export default function BudgetPage() {
             {/* Fun Tab */}
             {activeTab === "fun" && (
               <div className="space-y-4">
-                <h4 className="text-lg font-semibold text-gray-900 mb-4">Shared Fun Spending</h4>
+                <p className="text-sm text-gray-500 mb-4">Fun spending shared between both users</p>
                 {sharedFunItems.map((item) => (
                   <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -1124,7 +1124,7 @@ export default function BudgetPage() {
                         onChange={(e) =>
                           updateItem(setSharedFunItems, item.id, "name", e.target.value, "shared")
                         }
-                        placeholder="Item name"
+                        placeholder="Fun activity name"
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <button
@@ -1166,14 +1166,14 @@ export default function BudgetPage() {
                   className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                 >
                   <Plus className="w-4 h-4" />
-                  Add Fun Item
+                  Add Fun Activity
                 </button>
               </div>
             )}
 
             {/* Save Button for Fun Tab */}
             {activeTab === "fun" && (
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex justify-center">
                 <button
                   onClick={async () => {
                     console.log('=== SAVE FUN ITEMS CLICKED ===');
