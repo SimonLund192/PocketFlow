@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import ConditionalSidebar from "@/components/ConditionalSidebar";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,14 +17,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
-        <div className="flex h-screen bg-gray-50">
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+    <html lang="en" className="h-full">
+      <body className={`${inter.className} h-full m-0 p-0`}>
+        <AuthProvider>
+          <div className="flex h-full bg-gray-50">
+            <ConditionalSidebar />
+            <main className="flex-1 overflow-y-scroll">
+              {children}
+            </main>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );

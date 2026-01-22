@@ -1,121 +1,99 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Moon, Bell, Search, Database as DatabaseIcon, RefreshCw } from "lucide-react";
+import { Database as DatabaseIcon, RefreshCw, AlertCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import Header from "@/components/Header";
+import Tabs from "@/components/Tabs";
 
-interface Transaction {
-  _id: string;
-  user_id: string;
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-  type: "income" | "expense";
+interface Document {
+  [key: string]: any;
 }
 
 export default function Database() {
   const [activeCollection, setActiveCollection] = useState("transactions");
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [collections, setCollections] = useState<string[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [count, setCount] = useState(0);
 
-  const collections = [
-    "transactions",
-    "budgets",
-    "goals",
-    "categories",
-    "users",
-  ];
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("token");
+    return {
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
+    };
+  };
+
+  const fetchCollections = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/database/collections", {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCollections(data);
+        if (data.length > 0 && !activeCollection) {
+          setActiveCollection(data[0]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching collections:", error);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // This will connect to your backend API
-      const response = await fetch(`http://localhost:8000/api/${activeCollection}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data);
+      const [dataResponse, countResponse] = await Promise.all([
+        fetch(`http://localhost:8000/api/database/${activeCollection}`, {
+          headers: getAuthHeaders(),
+        }),
+        fetch(`http://localhost:8000/api/database/${activeCollection}/count`, {
+          headers: getAuthHeaders(),
+        }),
+      ]);
+
+      if (dataResponse.ok) {
+        const data = await dataResponse.json();
+        setDocuments(data);
+      } else {
+        const errorData = await dataResponse.json();
+        setError(errorData.detail || "Failed to fetch data");
+      }
+
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        setCount(countData.count);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
-      // For now, use sample data
-      setTransactions([
-        {
-          _id: "1",
-          user_id: "user_001",
-          amount: 5000,
-          category: "Salary",
-          description: "Monthly salary",
-          date: "2026-01-15",
-          type: "income",
-        },
-        {
-          _id: "2",
-          user_id: "user_001",
-          amount: 1200,
-          category: "Rent",
-          description: "Monthly rent payment",
-          date: "2026-01-01",
-          type: "expense",
-        },
-        {
-          _id: "3",
-          user_id: "user_001",
-          amount: 250,
-          category: "Groceries",
-          description: "Weekly grocery shopping",
-          date: "2026-01-10",
-          type: "expense",
-        },
-      ]);
+      setError(error instanceof Error ? error.message : "Failed to fetch data");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchCollections();
+  }, []);
+
+  useEffect(() => {
+    if (activeCollection) {
+      fetchData();
+    }
   }, [activeCollection]);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Database</h1>
-            <p className="text-sm text-gray-500 mt-1">View and manage database collections</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search Here"
-                className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Moon className="w-5 h-5 text-gray-600" />
-            </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold">
-              SL
-            </div>
-          </div>
-        </div>
-
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
-          <span>Dashboard</span>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">Database</span>
-        </div>
-      </header>
+      <Header 
+        title="Database" 
+        subtitle="View and manage database collections" 
+        breadcrumb={["Dashboard", "Database"]} 
+      />
 
       {/* Main Content */}
       <div className="p-8">
@@ -140,21 +118,17 @@ export default function Database() {
         </div>
 
         {/* Collection Tabs */}
-        <div className="flex items-center gap-4 mb-6">
-          {collections.map((collection) => (
-            <button
-              key={collection}
-              onClick={() => setActiveCollection(collection)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                activeCollection === collection
-                  ? "bg-indigo-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
-              }`}
-            >
-              {collection}
-            </button>
-          ))}
-        </div>
+        {collections.length > 0 && (
+          <Tabs tabs={collections} activeTab={activeCollection} onTabChange={setActiveCollection} />
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <p className="text-sm text-red-600">{error}</p>
+          </div>
+        )}
 
         {/* Data Table */}
         <Card className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -162,74 +136,44 @@ export default function Database() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    ID
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    User ID
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Category
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Description
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Amount
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                    Date
-                  </th>
+                  {documents.length > 0 &&
+                    Object.keys(documents[0]).map((key) => (
+                      <th
+                        key={key}
+                        className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
+                      >
+                        {key}
+                      </th>
+                    ))}
+                  {documents.length === 0 && !loading && (
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      No columns
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={100} className="px-6 py-8 text-center text-gray-500">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-600" />
                       Loading...
                     </td>
                   </tr>
-                ) : transactions.length === 0 ? (
+                ) : documents.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={100} className="px-6 py-8 text-center text-gray-500">
                       No data found in this collection
                     </td>
                   </tr>
                 ) : (
-                  transactions.map((transaction) => (
-                    <tr key={transaction._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm font-mono text-gray-900">
-                        {transaction._id}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {transaction.user_id}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            transaction.type === "income"
-                              ? "bg-green-100 text-green-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {transaction.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {transaction.category}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {transaction.description}
-                      </td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900">
-                        ${transaction.amount.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </td>
+                  documents.map((doc, index) => (
+                    <tr key={doc._id || index} className="hover:bg-gray-50 transition-colors">
+                      {Object.entries(doc).map(([key, value]) => (
+                        <td key={key} className="px-6 py-4 text-sm text-gray-700">
+                          {renderValue(value)}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}
@@ -238,13 +182,44 @@ export default function Database() {
           </div>
 
           {/* Table Footer */}
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
             <p className="text-sm text-gray-600">
-              Total records: <span className="font-semibold">{transactions.length}</span>
+              Total records: <span className="font-semibold">{count}</span>
+            </p>
+            <p className="text-sm text-gray-600">
+              Showing: <span className="font-semibold">{documents.length}</span> of{" "}
+              <span className="font-semibold">{count}</span>
             </p>
           </div>
         </Card>
       </div>
     </div>
   );
+}
+
+function renderValue(value: any): string {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  if (typeof value === "object") {
+    if (value instanceof Date) {
+      return new Date(value).toLocaleString();
+    }
+    // Try to parse ISO date strings
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      try {
+        return new Date(value).toLocaleString();
+      } catch (e) {
+        return value;
+      }
+    }
+    return JSON.stringify(value, null, 0);
+  }
+  if (typeof value === "boolean") {
+    return value ? "✓" : "✗";
+  }
+  if (typeof value === "number") {
+    return value.toLocaleString();
+  }
+  return String(value);
 }

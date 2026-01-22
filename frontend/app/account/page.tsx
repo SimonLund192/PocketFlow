@@ -1,21 +1,58 @@
 "use client";
 
-import { useState } from "react";
-import { Moon, Bell, Search, CheckCircle2, Shield, Play, Apple, GripVertical, Pencil, Trash2, DollarSign, Minus, Gamepad2, Receipt, Lightbulb, Heart } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle2, Shield, Play, Apple, GripVertical, Pencil, Trash2, DollarSign, Minus, Gamepad2, Receipt, Lightbulb, Heart, Loader2, PiggyBank, Landmark } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import Header from "@/components/Header";
+import Tabs from "@/components/Tabs";
+import { categoriesApi, Category } from "@/lib/categories-api";
+import { adminApi } from "@/lib/admin-api";
 
-interface Category {
+interface EditingCategory {
   id: string;
   name: string;
-  type: "income" | "expense";
+  type: string;
   icon: string;
   color: string;
 }
 
 export default function Settings() {
+  // Initialize activeTab with default value (no localStorage during SSR)
   const [activeTab, setActiveTab] = useState("Account");
+  const [isTabInitialized, setIsTabInitialized] = useState(false);
   const [partnerName, setPartnerName] = useState("Aya Laurvigen");
+  
+  // Load saved tab from localStorage after component mounts (client-side only)
+  useEffect(() => {
+    const savedTab = localStorage.getItem('settingsActiveTab');
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+    setIsTabInitialized(true);
+  }, []);
+  
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    if (isTabInitialized) {
+      localStorage.setItem('settingsActiveTab', activeTab);
+    }
+  }, [activeTab, isTabInitialized]);
+  
+  // Helper to get color class
+  const getColorClass = (color: string) => {
+    const colorMap: Record<string, string> = {
+      blue: "bg-blue-500",
+      pink: "bg-pink-500",
+      red: "bg-red-500",
+      yellow: "bg-yellow-500",
+      green: "bg-green-500",
+      purple: "bg-purple-500",
+      orange: "bg-orange-500",
+      indigo: "bg-indigo-500",
+    };
+    return colorMap[color] || "bg-gray-500";
+  };
   
   // Profile tab state
   const [fullName, setFullName] = useState("Simon Lund");
@@ -29,23 +66,188 @@ export default function Settings() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   // Categories tab state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryType, setNewCategoryType] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([
-    { id: "1", name: "Income", type: "income", icon: "dollar", color: "bg-blue-500" },
-  ]);
+  // Admin tab state
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
 
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([
-    { id: "1", name: "Subscription", type: "expense", icon: "minus", color: "bg-pink-500" },
-    { id: "2", name: "Website", type: "expense", icon: "minus", color: "bg-pink-500" },
-    { id: "3", name: "Gaming", type: "expense", icon: "gamepad", color: "bg-pink-600" },
-    { id: "4", name: "Bil", type: "expense", icon: "receipt", color: "bg-red-500" },
-    { id: "5", name: "Forsikring", type: "expense", icon: "lightbulb", color: "bg-yellow-500" },
-    { id: "6", name: "Streaming", type: "expense", icon: "heart", color: "bg-pink-600" },
-  ]);
+  // Fetch categories on mount
+  useEffect(() => {
+    if (activeTab === "Categories") {
+      loadCategories();
+    }
+  }, [activeTab]);
+
+  const loadCategories = async () => {
+    try {
+      setLoadingCategories(true);
+      setCategoriesError(null);
+      const data = await categoriesApi.getAll();
+      setCategories(data);
+    } catch (error) {
+      setCategoriesError(error instanceof Error ? error.message : "Failed to load categories");
+    } finally {
+      setLoadingCategories(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName || !newCategoryType || !newCategoryIcon || !newCategoryColor) {
+      setCategoriesError("Please fill in all fields");
+      return;
+    }
+
+    try {
+      setCreatingCategory(true);
+      setCategoriesError(null);
+      setEditingCategory(null); // Clear any editing state
+      const newCategory = await categoriesApi.create({
+        name: newCategoryName,
+        type: newCategoryType as Category["type"],
+        icon: newCategoryIcon,
+        color: newCategoryColor,
+      });
+      setCategories([...categories, newCategory]);
+      // Reset form
+      setNewCategoryName("");
+      setNewCategoryType("");
+      setNewCategoryIcon("");
+      setNewCategoryColor("");
+    } catch (error) {
+      setCategoriesError(error instanceof Error ? error.message : "Failed to create category");
+    } finally {
+      setCreatingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!confirm("Are you sure you want to delete this category?")) {
+      return;
+    }
+
+    try {
+      setCategoriesError(null);
+      await categoriesApi.delete(categoryId);
+      setCategories(categories.filter((c) => c.id !== categoryId));
+    } catch (error) {
+      setCategoriesError(error instanceof Error ? error.message : "Failed to delete category");
+    }
+  };
+
+  const handleStartEdit = (category: Category) => {
+    setEditingCategory({
+      id: category.id,
+      name: category.name,
+      type: category.type,
+      icon: category.icon,
+      color: category.color,
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCategory) return;
+
+    try {
+      setCategoriesError(null);
+      const updated = await categoriesApi.update(editingCategory.id, {
+        name: editingCategory.name,
+        type: editingCategory.type as Category["type"],
+        icon: editingCategory.icon,
+        color: editingCategory.color,
+      });
+      setCategories(categories.map((c) => (c.id === editingCategory.id ? updated : c)));
+      setEditingCategory(null);
+    } catch (error) {
+      setCategoriesError(error instanceof Error ? error.message : "Failed to update category");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCategory(null);
+  };
+
+  // Admin handlers
+  const handleClearTransactions = async () => {
+    if (!confirm("Are you sure you want to delete ALL transactions? This cannot be undone!")) {
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearTransactions();
+      setAdminMessage(result.message);
+      setTimeout(() => setAdminMessage(null), 5000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear transactions");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleClearBudgets = async () => {
+    if (!confirm("Are you sure you want to delete ALL budgets? This cannot be undone!")) {
+      return;
+    }
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearBudgets();
+      setAdminMessage(result.message);
+      setTimeout(() => setAdminMessage(null), 5000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear budgets");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleClearAllData = async () => {
+    const firstConfirm = confirm(
+      "⚠️ WARNING ⚠️\n\nThis will delete ALL your data including:\n- Transactions\n- Budgets\n- Categories\n- Goals\n\nThis action CANNOT be undone!\n\nAre you absolutely sure?"
+    );
+    
+    if (!firstConfirm) return;
+
+    const secondConfirm = confirm(
+      "⚠️ FINAL WARNING ⚠️\n\nThis is your last chance to cancel.\n\nClick OK to permanently delete ALL data."
+    );
+
+    if (!secondConfirm) return;
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const result = await adminApi.clearAllData();
+      setAdminMessage(`✅ ${result.message}`);
+      // Reload categories if on Categories tab
+      if (activeTab === "Categories") {
+        loadCategories();
+      }
+      setTimeout(() => setAdminMessage(null), 8000);
+    } catch (error) {
+      setAdminError(error instanceof Error ? error.message : "Failed to clear all data");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // Separate categories by type
+  const incomeCategories = categories.filter((c) => c.type === "income");
+  const expenseCategories = categories.filter((c) => c.type === "expense");
+  const savingsCategories = categories.filter((c) => c.type === "savings");
+  const funCategories = categories.filter((c) => c.type === "fun");
 
   const tabs = [
     "Account",
@@ -63,67 +265,21 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Account</h1>
-            <p className="text-sm text-gray-500 mt-1">Welcome Simon Lund</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search Here"
-                className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg w-80 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-              <Moon className="w-5 h-5 text-gray-600" />
-            </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-              <Bell className="w-5 h-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-            </button>
-            <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold">
-              SL
-            </div>
-          </div>
-        </div>
-
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
-          <span>Dashboard</span>
-          <span>/</span>
-          <span className="text-gray-900 font-medium">Account</span>
-        </div>
-      </header>
+      <Header 
+        title="Account" 
+        subtitle="Welcome Simon Lund" 
+        breadcrumb={["Dashboard", "Account"]} 
+      />
 
       {/* Main Content */}
       <div className="p-8">
-        {/* Tabs */}
-        <div className="flex items-center gap-8 mb-8 border-b border-gray-200">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-4 px-2 font-medium transition-colors relative ${
-                activeTab === tab
-                  ? "text-indigo-600"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              {tab}
-              {activeTab === tab && (
-                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600"></div>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* Tabs - only render after initialization to prevent flash */}
+        {isTabInitialized && (
+          <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+        )}
 
         {/* Content Grid */}
-        {activeTab === "Account" && (
+        {isTabInitialized && activeTab === "Account" && (
           <div className="grid grid-cols-2 gap-6">
             {/* Welcome Card */}
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
@@ -249,7 +405,7 @@ export default function Settings() {
         )}
 
         {/* Profile Tab */}
-        {activeTab === "Profile" && (
+        {isTabInitialized && activeTab === "Profile" && (
           <div className="space-y-6">
             {/* Top Row - User Profile Cards */}
             <div className="grid grid-cols-2 gap-6">
@@ -432,7 +588,7 @@ export default function Settings() {
         )}
 
         {/* Categories Tab */}
-        {activeTab === "Categories" && (
+        {isTabInitialized && activeTab === "Categories" && (
           <div className="grid grid-cols-[480px_1fr] gap-6">
             {/* Left Column - Create Category Form */}
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl h-fit">
@@ -462,16 +618,18 @@ export default function Settings() {
                 <select
                   value={newCategoryType}
                   onChange={(e) => setNewCategoryType(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
                   style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
                     backgroundRepeat: "no-repeat",
                     backgroundPosition: "right 1rem center",
                   }}
                 >
-                  <option value="">Choose...</option>
-                  <option value="income">Income</option>
-                  <option value="expense">Expense</option>
+                  <option value="" className="text-gray-400">Choose a budget type...</option>
+                  <option value="income" className="text-gray-900">💰 Income</option>
+                  <option value="expense" className="text-gray-900">💸 Expense</option>
+                  <option value="savings" className="text-gray-900">🏦 Savings</option>
+                  <option value="fun" className="text-gray-900">🎉 Fun</option>
                 </select>
               </div>
 
@@ -485,20 +643,34 @@ export default function Settings() {
                   <select
                     value={newCategoryIcon}
                     onChange={(e) => setNewCategoryIcon(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
                     style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "right 1rem center",
                     }}
                   >
-                    <option value="">Choose...</option>
-                    <option value="dollar">Dollar</option>
-                    <option value="minus">Minus</option>
-                    <option value="gamepad">Gamepad</option>
-                    <option value="receipt">Receipt</option>
-                    <option value="lightbulb">Lightbulb</option>
-                    <option value="heart">Heart</option>
+                    <option value="" className="text-gray-400">Choose...</option>
+                    <option value="dollar" className="text-gray-900">💵 Dollar</option>
+                    <option value="moneybag" className="text-gray-900">💰 Money Bag</option>
+                    <option value="car" className="text-gray-900">🚗 Car</option>
+                    <option value="house" className="text-gray-900">🏠 House</option>
+                    <option value="gamepad" className="text-gray-900">🎮 Games</option>
+                    <option value="subscription" className="text-gray-900">📱 Subscription</option>
+                    <option value="horse" className="text-gray-900">🐴 Horse</option>
+                    <option value="receipt" className="text-gray-900">🧾 Receipt</option>
+                    <option value="cart" className="text-gray-900">🛒 Shopping</option>
+                    <option value="food" className="text-gray-900">🍔 Food</option>
+                    <option value="plane" className="text-gray-900">✈️ Travel</option>
+                    <option value="heart" className="text-gray-900">❤️ Health</option>
+                    <option value="book" className="text-gray-900">📚 Education</option>
+                    <option value="lightbulb" className="text-gray-900">💡 Utilities</option>
+                    <option value="gift" className="text-gray-900">🎁 Gift</option>
+                    <option value="coffee" className="text-gray-900">☕ Coffee</option>
+                    <option value="fitness" className="text-gray-900">💪 Fitness</option>
+                    <option value="pet" className="text-gray-900">🐾 Pet</option>
+                    <option value="music" className="text-gray-900">🎵 Music</option>
+                    <option value="piggy-bank" className="text-gray-900">🐷 Savings</option>
                   </select>
                 </div>
 
@@ -510,58 +682,134 @@ export default function Settings() {
                   <select
                     value={newCategoryColor}
                     onChange={(e) => setNewCategoryColor(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-500 appearance-none bg-white"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
                     style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
                       backgroundRepeat: "no-repeat",
                       backgroundPosition: "right 1rem center",
                     }}
                   >
-                    <option value="">Choose...</option>
-                    <option value="blue">Blue</option>
-                    <option value="pink">Pink</option>
-                    <option value="red">Red</option>
-                    <option value="yellow">Yellow</option>
-                    <option value="green">Green</option>
+                    <option value="" className="text-gray-400">Choose...</option>
+                    <option value="blue" className="text-gray-900">🔵 Blue</option>
+                    <option value="pink" className="text-gray-900">🩷 Pink</option>
+                    <option value="red" className="text-gray-900">🔴 Red</option>
+                    <option value="yellow" className="text-gray-900">🟡 Yellow</option>
+                    <option value="green" className="text-gray-900">🟢 Green</option>
+                    <option value="purple" className="text-gray-900">🟣 Purple</option>
+                    <option value="orange" className="text-gray-900">🟠 Orange</option>
                   </select>
                 </div>
               </div>
 
               {/* Create Button */}
-              <Button className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-medium text-base">
-                Create new category
+              {categoriesError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                  {categoriesError}
+                </div>
+              )}
+              <Button
+                onClick={handleCreateCategory}
+                disabled={creatingCategory}
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creatingCategory ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Creating...
+                  </>
+                ) : (
+                  "Create new category"
+                )}
               </Button>
             </Card>
 
             {/* Right Column - Category Lists */}
             <div className="space-y-6">
-              {/* Income Categories */}
+              {loadingCategories ? (
+                <Card className="p-8 bg-white border border-gray-200 rounded-2xl flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                </Card>
+              ) : (
+                <>
+                  {/* Income Categories */}
               <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
                 <h2 className="text-xl font-bold text-gray-900 mb-6">
                   Income Categories
                 </h2>
 
                 <div className="space-y-3">
-                  {incomeCategories.map((category) => (
-                    <div
-                      key={category.id}
-                      className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                    >
-                      <GripVertical className="w-5 h-5 text-gray-400" />
-                      <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                        <DollarSign className="w-5 h-5" />
-                      </div>
-                      <span className="flex-1 text-gray-900 font-medium">
-                        {category.name}
-                      </span>
-                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Pencil className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
+                  {incomeCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No income categories yet.</p>
+                      <p className="text-xs mt-1">Create one to get started!</p>
                     </div>
-                  ))}
+                  ) : (
+                    incomeCategories.map((category) => {
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
+                    let IconComponent = DollarSign;
+                    if (category.icon === "minus") IconComponent = Minus;
+                    if (category.icon === "gamepad") IconComponent = Gamepad2;
+                    if (category.icon === "receipt") IconComponent = Receipt;
+                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
+                    if (category.icon === "heart") IconComponent = Heart;
+
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400" />
+                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="flex-1 text-gray-900 font-medium">
+                          {category.name}
+                        </span>
+                        <button
+                          onClick={() => handleStartEdit(category)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    );
+                  })
+                  )}
                 </div>
               </Card>
 
@@ -572,12 +820,49 @@ export default function Settings() {
                 </h2>
 
                 <div className="space-y-3">
-                  {expenseCategories.map((category) => {
+                  {expenseCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No expense categories yet.</p>
+                      <p className="text-xs mt-1">Create one to get started!</p>
+                    </div>
+                  ) : (
+                    expenseCategories.map((category) => {
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
                     let IconComponent = Minus;
                     if (category.icon === "gamepad") IconComponent = Gamepad2;
                     if (category.icon === "receipt") IconComponent = Receipt;
                     if (category.icon === "lightbulb") IconComponent = Lightbulb;
                     if (category.icon === "heart") IconComponent = Heart;
+                    if (category.icon === "dollar") IconComponent = DollarSign;
+
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div
@@ -585,29 +870,201 @@ export default function Settings() {
                         className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
                       >
                         <GripVertical className="w-5 h-5 text-gray-400" />
-                        <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
                           <IconComponent className="w-5 h-5" />
                         </div>
                         <span className="flex-1 text-gray-900 font-medium">
                           {category.name}
                         </span>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button
+                          onClick={() => handleStartEdit(category)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <Pencil className="w-4 h-4 text-blue-600" />
                         </button>
-                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </button>
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </Card>
+
+              {/* Savings Categories */}
+              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">
+                  Savings Categories
+                </h2>
+
+                <div className="space-y-3">
+                  {savingsCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No savings categories yet.</p>
+                      <p className="text-xs mt-1">Create one to get started!</p>
+                    </div>
+                  ) : (
+                    savingsCategories.map((category) => {
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
+                    let IconComponent = DollarSign;
+                    if (category.icon === "piggy-bank") IconComponent = PiggyBank;
+                    if (category.icon === "landmark") IconComponent = Landmark;
+                    if (category.icon === "heart") IconComponent = Heart;
+                    if (category.icon === "dollar") IconComponent = DollarSign;
+
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400" />
+                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="flex-1 text-gray-900 font-medium">
+                          {category.name}
+                        </span>
+                        <button
+                          onClick={() => handleStartEdit(category)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    );
+                  })
+                  )}
+                </div>
+              </Card>
+
+              {/* Fun Categories */}
+              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+                <h2 className="text-xl font-bold text-gray-900 mb-6">
+                  Fun Categories
+                </h2>
+
+                <div className="space-y-3">
+                  {funCategories.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p className="text-sm">No fun categories yet.</p>
+                      <p className="text-xs mt-1">Create one to get started!</p>
+                    </div>
+                  ) : (
+                    funCategories.map((category) => {
+                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
+                    let IconComponent = Gamepad2;
+                    if (category.icon === "gamepad") IconComponent = Gamepad2;
+                    if (category.icon === "heart") IconComponent = Heart;
+                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
+                    if (category.icon === "receipt") IconComponent = Receipt;
+                    if (category.icon === "dollar") IconComponent = DollarSign;
+
+                    if (isEditing) {
+                      return (
+                        <div
+                          key={category.id}
+                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400" />
+                          <input
+                            type="text"
+                            value={editingCategory?.name || ''}
+                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={category.id}
+                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        <GripVertical className="w-5 h-5 text-gray-400" />
+                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+                        <span className="flex-1 text-gray-900 font-medium">
+                          {category.name}
+                        </span>
+                        <button
+                          onClick={() => handleStartEdit(category)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4 text-blue-600" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </button>
+                      </div>
+                    );
+                  })
+                  )}
+                </div>
+              </Card>
+                </>
+              )}
             </div>
           </div>
         )}
 
         {/* Admin Tab */}
-        {activeTab === "Admin" && (
+        {isTabInitialized && activeTab === "Admin" && (
           <div className="max-w-4xl">
             {/* Warning Banner */}
             <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 mb-8">
@@ -639,6 +1096,18 @@ export default function Settings() {
               </div>
             </div>
 
+            {/* Success/Error Messages */}
+            {adminMessage && (
+              <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4 mb-6">
+                <p className="text-green-800 font-medium">{adminMessage}</p>
+              </div>
+            )}
+            {adminError && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 mb-6">
+                <p className="text-red-800 font-medium">{adminError}</p>
+              </div>
+            )}
+
             {/* Clear All Transactions */}
             <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">
               <h3 className="text-xl font-bold text-gray-900 mb-3">
@@ -653,8 +1122,12 @@ export default function Settings() {
                   transactions
                 </code>
               </div>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear Transactions
+              <Button 
+                onClick={handleClearTransactions}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear Transactions"}
               </Button>
             </Card>
 
@@ -672,8 +1145,12 @@ export default function Settings() {
                   budgets
                 </code>
               </div>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear Budgets
+              <Button 
+                onClick={handleClearBudgets}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear Budgets"}
               </Button>
             </Card>
 
@@ -698,11 +1175,15 @@ export default function Settings() {
               <p className="text-sm text-red-700 font-semibold mb-6 flex items-start gap-2">
                 <span className="font-bold">⚠</span>
                 <span>
-                  EXTREME CAUTION: This will delete EVERYTHING from the database!
+                  EXTREME CAUTION: This will delete EVERYTHING from the database including transactions, budgets, categories, and goals!
                 </span>
               </p>
-              <Button className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium">
-                Clear ALL Data
+              <Button 
+                onClick={handleClearAllData}
+                disabled={adminLoading}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Clearing..." : "Clear ALL Data"}
               </Button>
             </Card>
           </div>

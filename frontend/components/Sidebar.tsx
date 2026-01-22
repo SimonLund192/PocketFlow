@@ -8,6 +8,7 @@ import {
   HelpCircle,
   BarChart3,
   Database,
+  Wallet,
 } from "lucide-react";
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,9 +31,7 @@ export default function Sidebar() {
     <div className="w-14 bg-indigo-600 flex flex-col items-center py-4 space-y-6">
       {/* Logo */}
       <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mb-4">
-        <div className="w-6 h-6 bg-indigo-600 rounded" style={{ 
-          clipPath: "polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)" 
-        }}></div>
+        <Wallet className="w-6 h-6 text-indigo-600" />
       </div>
 
       {/* Navigation Items */}
