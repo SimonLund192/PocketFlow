@@ -2,6 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
+import BudgetTabContent from "@/components/BudgetTabContent";
 import { TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { categoriesApi, Category } from "@/lib/categories-api";
@@ -498,6 +499,101 @@ export default function BudgetPage() {
     }
   };
 
+  // Save handlers for each tab
+  const saveSharedExpenses = async () => {
+    if (!currentBudget) {
+      alert('No budget loaded. Please wait for the page to load.');
+      return;
+    }
+    console.log('=== SAVING SHARED EXPENSES ===');
+    let savedCount = 0;
+    let errorCount = 0;
+    for (const item of sharedExpenseItems) {
+      try {
+        await saveItem(item, 'shared', setSharedExpenseItems);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save shared expense:', item, error);
+        errorCount++;
+      }
+    }
+    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+    if (errorCount > 0) {
+      alert(`Shared expenses saved with ${errorCount} errors. Check console for details.`);
+    } else {
+      alert(`Shared expenses saved successfully! ${savedCount} items saved.`);
+    }
+  };
+
+  const savePersonalExpenses = async () => {
+    if (!currentBudget) {
+      alert('No budget loaded. Please wait for the page to load.');
+      return;
+    }
+    console.log('=== SAVING PERSONAL EXPENSES ===');
+    let savedCount = 0;
+    let errorCount = 0;
+    for (const item of [...user1PersonalExpenses, ...user2PersonalExpenses]) {
+      try {
+        const ownerSlot = user1PersonalExpenses.includes(item) ? 'user1' : 'user2';
+        const setter = user1PersonalExpenses.includes(item) ? setUser1PersonalExpenses : setUser2PersonalExpenses;
+        await saveItem(item, ownerSlot, setter);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save personal expense:', item, error);
+        errorCount++;
+      }
+    }
+    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+    if (errorCount > 0) {
+      alert(`Personal expenses saved with ${errorCount} errors. Check console for details.`);
+    } else {
+      alert(`Personal expenses saved successfully! ${savedCount} items saved.`);
+    }
+  };
+
+  const saveSharedSavings = async () => {
+    console.log('=== SAVE SHARED SAVINGS CLICKED ===');
+    let savedCount = 0;
+    let errorCount = 0;
+    for (const item of sharedSavingsItems) {
+      try {
+        await saveItem(item, 'shared', setSharedSavingsItems);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save shared savings:', item, error);
+        errorCount++;
+      }
+    }
+    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+    if (errorCount > 0) {
+      alert(`Shared savings saved with ${errorCount} errors. Check console for details.`);
+    } else {
+      alert(`Shared savings saved successfully! ${savedCount} items saved.`);
+    }
+  };
+
+  const saveFunItems = async () => {
+    console.log('=== SAVE FUN ITEMS CLICKED ===');
+    let savedCount = 0;
+    let errorCount = 0;
+    for (const item of sharedFunItems) {
+      try {
+        await saveItem(item, 'shared', setSharedFunItems);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save fun item:', item, error);
+        errorCount++;
+      }
+    }
+    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+    if (errorCount > 0) {
+      alert(`Fun items saved with ${errorCount} errors. Check console for details.`);
+    } else {
+      alert(`Fun items saved successfully! ${savedCount} items saved.`);
+    }
+  };
+
   // Calculate totals
   const totalIncome = 
     user1IncomeItems.reduce((sum, item) => sum + item.amount, 0) +
@@ -558,6 +654,12 @@ export default function BudgetPage() {
             trend="down"
           />
           <StatCard
+            title="REMAINING"
+            value={`${remaining.toLocaleString()} kr.`}
+            subtitle="Last month"
+            trend="up"
+          />
+          <StatCard
             title="SHARED SAVINGS"
             value={`${sharedSavingsTotal.toLocaleString()} kr.`}
             subtitle="Last month"
@@ -568,12 +670,6 @@ export default function BudgetPage() {
             value={`${sharedFunTotal.toLocaleString()} kr.`}
             subtitle="Last month"
             trend="neutral"
-          />
-          <StatCard
-            title="REMAINING"
-            value={`${remaining.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="up"
           />
         </div>
 
@@ -602,607 +698,134 @@ export default function BudgetPage() {
           <div className="p-8">
             {/* Income Tab */}
             {activeTab === "income" && (
-              <div className="grid grid-cols-2 gap-8">
-                {/* User 1 Column */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <input
-                      type="text"
-                      value={user1Name}
-                      onChange={(e) => setUser1Name(e.target.value)}
-                      className="text-lg font-semibold text-gray-900 border-b border-transparent hover:border-gray-300 focus:outline-none focus:border-indigo-500 px-2 py-1"
-                    />
-                  </div>
-
-                  {user1IncomeItems.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "name", e.target.value, "user1")
-                          }
-                          placeholder="Name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItem(setUser1IncomeItems, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "category", e.target.value, "user1")
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          {incomeCategories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0, "user1")
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => addItem(setUser1IncomeItems, "user1", "")}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
-
-                {/* User 2 Column */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <input
-                      type="text"
-                      value={user2Name}
-                      onChange={(e) => setUser2Name(e.target.value)}
-                      className="text-lg font-semibold text-gray-900 border-b border-transparent hover:border-gray-300 focus:outline-none focus:border-indigo-500 px-2 py-1"
-                    />
-                  </div>
-
-                  {user2IncomeItems.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "name", e.target.value, "user2")
-                          }
-                          placeholder="Name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItem(setUser2IncomeItems, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "category", e.target.value, "user2")
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          {incomeCategories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0, "user2")
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => addItem(setUser2IncomeItems, "user2", "")}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Save Budget Button for Income Tab */}
-            {activeTab === "income" && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={saveBudget}
-                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                  </svg>
-                  Save Budget
-                </button>
-              </div>
+              <BudgetTabContent
+                layout="double"
+                columns={[
+                  {
+                    title: user1Name,
+                    items: user1IncomeItems,
+                    onAddItem: () => addItem(setUser1IncomeItems, "user1", ""),
+                    onUpdateItem: (id, field, value) => 
+                      updateItem(setUser1IncomeItems, id, field, value, "user1"),
+                    onRemoveItem: (id) => removeItem(setUser1IncomeItems, id),
+                    categories: incomeCategories,
+                    namePlaceholder: "Name",
+                    addButtonText: "Add Item",
+                  },
+                  {
+                    title: user2Name,
+                    items: user2IncomeItems,
+                    onAddItem: () => addItem(setUser2IncomeItems, "user2", ""),
+                    onUpdateItem: (id, field, value) => 
+                      updateItem(setUser2IncomeItems, id, field, value, "user2"),
+                    onRemoveItem: (id) => removeItem(setUser2IncomeItems, id),
+                    categories: incomeCategories,
+                    namePlaceholder: "Name",
+                    addButtonText: "Add Item",
+                  },
+                ]}
+                saveButtonText="Save Budget"
+                onSave={saveBudget}
+              />
             )}
 
             {/* Shared Expenses Tab */}
             {activeTab === "shared-expenses" && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 mb-4">Shared expenses split between both users</p>
-                {sharedExpenseItems.map((item) => (
-                  <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "name", e.target.value, "shared")
-                        }
-                        placeholder="Expense name"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <button
-                        onClick={() => removeItem(setSharedExpenseItems, item.id)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select
-                        value={item.category}
-                        onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "category", e.target.value, "shared")
-                        }
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Select Category</option>
-                        {expenseCategories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        value={item.amount}
-                        onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "amount", parseFloat(e.target.value) || 0, "shared")
-                        }
-                        placeholder="Amount"
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => addItem(setSharedExpenseItems, "shared", "")}
-                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Shared Expense
-                </button>
-              </div>
-            )}
-
-            {/* Save Budget Button for Shared Expenses Tab */}
-            {activeTab === "shared-expenses" && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={async () => {
-                    if (!currentBudget) {
-                      alert('No budget loaded. Please wait for the page to load.');
-                      return;
-                    }
-                    console.log('=== SAVING SHARED EXPENSES ===');
-                    let savedCount = 0;
-                    let errorCount = 0;
-                    for (const item of sharedExpenseItems) {
-                      try {
-                        await saveItem(item, 'shared', setSharedExpenseItems);
-                        savedCount++;
-                      } catch (error) {
-                        console.error('Failed to save shared expense:', item, error);
-                        errorCount++;
-                      }
-                    }
-                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-                    if (errorCount > 0) {
-                      alert(`Shared expenses saved with ${errorCount} errors. Check console for details.`);
-                    } else {
-                      alert(`Shared expenses saved successfully! ${savedCount} items saved.`);
-                    }
-                  }}
-                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                  </svg>
-                  Save Shared Expenses
-                </button>
-              </div>
+              <BudgetTabContent
+                description="Shared expenses split between both users"
+                layout="single"
+                columns={[
+                  {
+                    items: sharedExpenseItems,
+                    onAddItem: () => addItem(setSharedExpenseItems, "shared", ""),
+                    onUpdateItem: (id, field, value) =>
+                      updateItem(setSharedExpenseItems, id, field, value, "shared"),
+                    onRemoveItem: (id) => removeItem(setSharedExpenseItems, id),
+                    categories: expenseCategories,
+                    namePlaceholder: "Expense name",
+                    addButtonText: "Add Shared Expense",
+                  },
+                ]}
+                saveButtonText="Save Shared Expenses"
+                onSave={saveSharedExpenses}
+              />
             )}
 
             {/* Personal Expenses Tab */}
             {activeTab === "personal-expenses" && (
-              <div className="grid grid-cols-2 gap-8">
-                {/* User 1 Personal Expenses */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">{user1Name}</h4>
-                  {user1PersonalExpenses.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "name", e.target.value, "user1")
-                          }
-                          placeholder="Expense name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItem(setUser1PersonalExpenses, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "category", e.target.value, "user1")
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          {expenseCategories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0, "user1")
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => addItem(setUser1PersonalExpenses, "user1", "")}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
-
-                {/* User 2 Personal Expenses */}
-                <div className="space-y-4">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-4">{user2Name}</h4>
-                  {user2PersonalExpenses.map((item) => (
-                    <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "name", e.target.value, "user2")
-                          }
-                          placeholder="Expense name"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                        <button
-                          onClick={() => removeItem(setUser2PersonalExpenses, item.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <select
-                          value={item.category}
-                          onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "category", e.target.value, "user2")
-                          }
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select Category</option>
-                          {expenseCategories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          value={item.amount}
-                          onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0, "user2")
-                          }
-                          placeholder="Amount"
-                          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => addItem(setUser2PersonalExpenses, "user2", "")}
-                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Item
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Save Budget Button for Personal Expenses Tab */}
-            {activeTab === "personal-expenses" && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={async () => {
-                    if (!currentBudget) {
-                      alert('No budget loaded. Please wait for the page to load.');
-                      return;
-                    }
-                    console.log('=== SAVING PERSONAL EXPENSES ===');
-                    let savedCount = 0;
-                    let errorCount = 0;
-                    
-                    // Save User 1 personal expenses
-                    for (const item of user1PersonalExpenses) {
-                      try {
-                        await saveItem(item, 'user1', setUser1PersonalExpenses);
-                        savedCount++;
-                      } catch (error) {
-                        console.error('Failed to save user1 personal expense:', item, error);
-                        errorCount++;
-                      }
-                    }
-                    
-                    // Save User 2 personal expenses
-                    for (const item of user2PersonalExpenses) {
-                      try {
-                        await saveItem(item, 'user2', setUser2PersonalExpenses);
-                        savedCount++;
-                      } catch (error) {
-                        console.error('Failed to save user2 personal expense:', item, error);
-                        errorCount++;
-                      }
-                    }
-                    
-                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-                    if (errorCount > 0) {
-                      alert(`Personal expenses saved with ${errorCount} errors. Check console for details.`);
-                    } else {
-                      alert(`Personal expenses saved successfully! ${savedCount} items saved.`);
-                    }
-                  }}
-                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                  </svg>
-                  Save Personal Expenses
-                </button>
-              </div>
+              <BudgetTabContent
+                layout="double"
+                columns={[
+                  {
+                    title: user1Name,
+                    items: user1PersonalExpenses,
+                    onAddItem: () => addItem(setUser1PersonalExpenses, "user1", ""),
+                    onUpdateItem: (id, field, value) =>
+                      updateItem(setUser1PersonalExpenses, id, field, value, "user1"),
+                    onRemoveItem: (id) => removeItem(setUser1PersonalExpenses, id),
+                    categories: expenseCategories,
+                    namePlaceholder: "Expense name",
+                    addButtonText: "Add Item",
+                  },
+                  {
+                    title: user2Name,
+                    items: user2PersonalExpenses,
+                    onAddItem: () => addItem(setUser2PersonalExpenses, "user2", ""),
+                    onUpdateItem: (id, field, value) =>
+                      updateItem(setUser2PersonalExpenses, id, field, value, "user2"),
+                    onRemoveItem: (id) => removeItem(setUser2PersonalExpenses, id),
+                    categories: expenseCategories,
+                    namePlaceholder: "Expense name",
+                    addButtonText: "Add Item",
+                  },
+                ]}
+                saveButtonText="Save Personal Expenses"
+                onSave={savePersonalExpenses}
+              />
             )}
 
             {/* Shared Savings Tab */}
             {activeTab === "shared-savings" && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 mb-4">Savings goals shared between both users</p>
-                {sharedSavingsItems.map((item) => (
-                  <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "name", e.target.value, "shared")
-                        }
-                        placeholder="Savings goal name"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <button
-                        onClick={() => removeItem(setSharedSavingsItems, item.id)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select
-                        value={item.category}
-                        onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "category", e.target.value, "shared")
-                        }
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Select Category</option>
-                        {savingsCategories.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        value={item.amount}
-                        onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "amount", parseFloat(e.target.value) || 0, "shared")
-                        }
-                        placeholder="Amount"
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => addItem(setSharedSavingsItems, "shared", "")}
-                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Savings Goal
-                </button>
-              </div>
-            )}
-
-            {/* Save Budget Button for Shared Savings Tab */}
-            {activeTab === "shared-savings" && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={async () => {
-                    if (!currentBudget) {
-                      alert('No budget loaded. Please wait for the page to load.');
-                      return;
-                    }
-                    console.log('=== SAVING SHARED SAVINGS ===');
-                    let savedCount = 0;
-                    let errorCount = 0;
-                    for (const item of sharedSavingsItems) {
-                      try {
-                        await saveItem(item, 'shared', setSharedSavingsItems);
-                        savedCount++;
-                      } catch (error) {
-                        console.error('Failed to save shared savings:', item, error);
-                        errorCount++;
-                      }
-                    }
-                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-                    if (errorCount > 0) {
-                      alert(`Shared savings saved with ${errorCount} errors. Check console for details.`);
-                    } else {
-                      alert(`Shared savings saved successfully! ${savedCount} items saved.`);
-                    }
-                  }}
-                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                  </svg>
-                  Save Shared Savings
-                </button>
-              </div>
+              <BudgetTabContent
+                description="Savings goals shared between both users"
+                layout="single"
+                columns={[
+                  {
+                    items: sharedSavingsItems,
+                    onAddItem: () => addItem(setSharedSavingsItems, "shared", ""),
+                    onUpdateItem: (id, field, value) =>
+                      updateItem(setSharedSavingsItems, id, field, value, "shared"),
+                    onRemoveItem: (id) => removeItem(setSharedSavingsItems, id),
+                    categories: savingsCategories,
+                    namePlaceholder: "Savings goal name",
+                    addButtonText: "Add Savings Goal",
+                  },
+                ]}
+                saveButtonText="Save Shared Savings"
+                onSave={saveSharedSavings}
+              />
             )}
 
             {/* Fun Tab */}
             {activeTab === "fun" && (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500 mb-4">Fun spending shared between both users</p>
-                {sharedFunItems.map((item) => (
-                  <div key={item.id} className="space-y-3 p-4 border border-gray-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) =>
-                          updateItem(setSharedFunItems, item.id, "name", e.target.value, "shared")
-                        }
-                        placeholder="Fun activity name"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <button
-                        onClick={() => removeItem(setSharedFunItems, item.id)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select
-                        value={item.category}
-                        onChange={(e) =>
-                          updateItem(setSharedFunItems, item.id, "category", e.target.value, "shared")
-                        }
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="">Select Category</option>
-                        {funCategories.map((cat) => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        value={item.amount}
-                        onChange={(e) =>
-                          updateItem(setSharedFunItems, item.id, "amount", parseFloat(e.target.value) || 0, "shared")
-                        }
-                        placeholder="Amount"
-                        className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={() => addItem(setSharedFunItems, "shared", "")}
-                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Fun Activity
-                </button>
-              </div>
-            )}
-
-            {/* Save Button for Fun Tab */}
-            {activeTab === "fun" && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={async () => {
-                    console.log('=== SAVE FUN ITEMS CLICKED ===');
-                    let savedCount = 0;
-                    let errorCount = 0;
-                    for (const item of sharedFunItems) {
-                      try {
-                        await saveItem(item, 'shared', setSharedFunItems);
-                        savedCount++;
-                      } catch (error) {
-                        console.error('Failed to save fun item:', item, error);
-                        errorCount++;
-                      }
-                    }
-                    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-                    if (errorCount > 0) {
-                      alert(`Fun items saved with ${errorCount} errors. Check console for details.`);
-                    } else {
-                      alert(`Fun items saved successfully! ${savedCount} items saved.`);
-                    }
-                  }}
-                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
-                  </svg>
-                  Save Fun Items
-                </button>
-              </div>
+              <BudgetTabContent
+                description="Fun spending shared between both users"
+                layout="single"
+                columns={[
+                  {
+                    items: sharedFunItems,
+                    onAddItem: () => addItem(setSharedFunItems, "shared", ""),
+                    onUpdateItem: (id, field, value) =>
+                      updateItem(setSharedFunItems, id, field, value, "shared"),
+                    onRemoveItem: (id) => removeItem(setSharedFunItems, id),
+                    categories: funCategories,
+                    namePlaceholder: "Fun activity name",
+                    addButtonText: "Add Fun Activity",
+                  },
+                ]}
+                saveButtonText="Save Fun Items"
+                onSave={saveFunItems}
+              />
             )}
           </div>
         </Card>
