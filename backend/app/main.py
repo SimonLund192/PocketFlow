@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import transactions, dashboard, auth
+from app.routes import transactions, dashboard, auth, categories
 
 app = FastAPI(title="PocketFlow API", version="1.0.0")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, tags=["authentication"])
+app.include_router(categories.router, tags=["categories"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 
