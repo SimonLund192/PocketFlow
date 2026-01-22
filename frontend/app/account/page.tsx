@@ -652,11 +652,25 @@ export default function Settings() {
                   >
                     <option value="" className="text-gray-400">Choose...</option>
                     <option value="dollar" className="text-gray-900">💵 Dollar</option>
-                    <option value="minus" className="text-gray-900">➖ Minus</option>
-                    <option value="gamepad" className="text-gray-900">🎮 Gamepad</option>
+                    <option value="moneybag" className="text-gray-900">💰 Money Bag</option>
+                    <option value="car" className="text-gray-900">🚗 Car</option>
+                    <option value="house" className="text-gray-900">🏠 House</option>
+                    <option value="gamepad" className="text-gray-900">🎮 Games</option>
+                    <option value="subscription" className="text-gray-900">📱 Subscription</option>
+                    <option value="horse" className="text-gray-900">🐴 Horse</option>
                     <option value="receipt" className="text-gray-900">🧾 Receipt</option>
-                    <option value="lightbulb" className="text-gray-900">💡 Lightbulb</option>
-                    <option value="heart" className="text-gray-900">❤️ Heart</option>
+                    <option value="cart" className="text-gray-900">🛒 Shopping</option>
+                    <option value="food" className="text-gray-900">🍔 Food</option>
+                    <option value="plane" className="text-gray-900">✈️ Travel</option>
+                    <option value="heart" className="text-gray-900">❤️ Health</option>
+                    <option value="book" className="text-gray-900">📚 Education</option>
+                    <option value="lightbulb" className="text-gray-900">💡 Utilities</option>
+                    <option value="gift" className="text-gray-900">🎁 Gift</option>
+                    <option value="coffee" className="text-gray-900">☕ Coffee</option>
+                    <option value="fitness" className="text-gray-900">💪 Fitness</option>
+                    <option value="pet" className="text-gray-900">🐾 Pet</option>
+                    <option value="music" className="text-gray-900">🎵 Music</option>
+                    <option value="piggy-bank" className="text-gray-900">🐷 Savings</option>
                   </select>
                 </div>
 
