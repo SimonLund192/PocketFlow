@@ -227,9 +227,7 @@ export default function Settings() {
 
   // Separate categories by type
   const incomeCategories = categories.filter((c) => c.type === "income");
-  const expenseCategories = categories.filter((c) =>
-    ["shared-expenses", "personal-expenses", "shared-savings", "fun"].includes(c.type)
-  );
+  const expenseCategories = categories.filter((c) => c.type === "expense");
 
   const tabs = [
     "Account",
@@ -606,11 +604,8 @@ export default function Settings() {
                   }}
                 >
                   <option value="" className="text-gray-400">Choose a budget type...</option>
-                  <option value="income" className="text-gray-900">Income</option>
-                  <option value="shared-expenses" className="text-gray-900">Shared Expenses</option>
-                  <option value="personal-expenses" className="text-gray-900">Personal Expenses</option>
-                  <option value="shared-savings" className="text-gray-900">Shared Savings</option>
-                  <option value="fun" className="text-gray-900">Fun</option>
+                  <option value="income" className="text-gray-900">💰 Income</option>
+                  <option value="expense" className="text-gray-900">💸 Expense</option>
                 </select>
               </div>
 
