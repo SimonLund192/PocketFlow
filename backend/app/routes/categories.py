@@ -1,141 +1,138 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List
-from bson import ObjectId
-from app.database import get_database
-from app.models import Category, CategoryCreate, CategoryUpdate
-from app.dependencies import get_current_user
+from fastapi import APIRouter, HTTPException, status, Depends, Query
+from typing import List, Optional
+from app.models import CategoryCreate, CategoryUpdate, CategoryResponse
+from app.dependencies import get_current_user_id
+from app.services.category_service import CategoryService
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
-@router.get("/", response_model=List[Category])
-async def get_categories(current_user: str = Depends(get_current_user)):
-    """Get all categories for the current user"""
-    db = await get_database()
-    categories_collection = db["categories"]
+
+@router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_category(
+    category_data: CategoryCreate,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Create a new category for the logged-in user.
     
-    # Find user by email to get user_id
-    users_collection = db["users"]
-    user = await users_collection.find_one({"email": current_user})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    - **name**: Category name (1-100 characters)
+    - **type**: Category type (income or expense)
+    - **icon**: Optional icon identifier
+    - **color**: Optional color code
     
-    user_id = str(user["_id"])
+    Returns the created category with timestamps.
     
-    # Get all categories for this user
-    categories = []
-    async for category in categories_collection.find({"user_id": user_id}):
-        categories.append(Category(**category))
+    Raises:
+        400: If category with same (name, type) already exists
+    """
+    try:
+        category = await CategoryService.create_category(user_id, category_data)
+        return category
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.get("/", response_model=List[CategoryResponse])
+async def get_categories(
+    user_id: str = Depends(get_current_user_id),
+    type: Optional[str] = Query(None, description="Filter by category type (income or expense)")
+):
+    """
+    Get all categories for the logged-in user.
     
+    Optionally filter by category type using the 'type' query parameter.
+    
+    Returns categories sorted by name.
+    """
+    categories = await CategoryService.get_categories(user_id, type)
     return categories
 
 
-@router.post("/", response_model=Category, status_code=status.HTTP_201_CREATED)
-async def create_category(
-    category_data: CategoryCreate,
-    current_user: str = Depends(get_current_user)
+@router.get("/{category_id}", response_model=CategoryResponse)
+async def get_category(
+    category_id: str,
+    user_id: str = Depends(get_current_user_id)
 ):
-    """Create a new category"""
-    db = await get_database()
-    categories_collection = db["categories"]
-    users_collection = db["users"]
+    """
+    Get a single category by ID.
     
-    # Find user by email to get user_id
-    user = await users_collection.find_one({"email": current_user})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    Only returns the category if it belongs to the logged-in user.
     
-    user_id = str(user["_id"])
+    Raises:
+        404: If category not found or doesn't belong to user
+    """
+    category = await CategoryService.get_category(user_id, category_id)
     
-    # Create category document
-    category_doc = {
-        "user_id": user_id,
-        "name": category_data.name,
-        "type": category_data.type,
-        "icon": category_data.icon,
-        "color": category_data.color,
-    }
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
     
-    # Insert category
-    result = await categories_collection.insert_one(category_doc)
-    category_doc["_id"] = result.inserted_id
-    
-    return Category(**category_doc)
+    return category
 
 
-@router.put("/{category_id}", response_model=Category)
+@router.put("/{category_id}", response_model=CategoryResponse)
 async def update_category(
     category_id: str,
     category_data: CategoryUpdate,
-    current_user: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user_id)
 ):
-    """Update a category"""
-    db = await get_database()
-    categories_collection = db["categories"]
-    users_collection = db["users"]
+    """
+    Update a category.
     
-    # Find user by email to get user_id
-    user = await users_collection.find_one({"email": current_user})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    All fields are optional. Only provided fields will be updated.
     
-    user_id = str(user["_id"])
-    
-    # Check if category exists and belongs to user
-    if not ObjectId.is_valid(category_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid category ID")
-    
-    category = await categories_collection.find_one({
-        "_id": ObjectId(category_id),
-        "user_id": user_id
-    })
-    
-    if not category:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-    
-    # Build update document
-    update_data = {k: v for k, v in category_data.model_dump(exclude_unset=True).items() if v is not None}
-    
-    if not update_data:
-        return Category(**category)
-    
-    # Update category
-    await categories_collection.update_one(
-        {"_id": ObjectId(category_id)},
-        {"$set": update_data}
-    )
-    
-    # Get updated category
-    updated_category = await categories_collection.find_one({"_id": ObjectId(category_id)})
-    return Category(**updated_category)
+    Raises:
+        404: If category not found or doesn't belong to user
+        400: If update would create a duplicate category
+    """
+    try:
+        category = await CategoryService.update_category(user_id, category_id, category_data)
+        
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found"
+            )
+        
+        return category
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_category(
     category_id: str,
-    current_user: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user_id)
 ):
-    """Delete a category"""
-    db = await get_database()
-    categories_collection = db["categories"]
-    users_collection = db["users"]
+    """
+    Delete a category.
     
-    # Find user by email to get user_id
-    user = await users_collection.find_one({"email": current_user})
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    Cannot delete a category that is in use by budget line items.
     
-    user_id = str(user["_id"])
-    
-    # Check if category exists and belongs to user
-    if not ObjectId.is_valid(category_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid category ID")
-    
-    result = await categories_collection.delete_one({
-        "_id": ObjectId(category_id),
-        "user_id": user_id
-    })
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-    
-    return None
+    Raises:
+        404: If category not found or doesn't belong to user
+        400: If category is in use by budget line items
+    """
+    try:
+        deleted = await CategoryService.delete_category(user_id, category_id)
+        
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Category not found"
+            )
+        
+        return None
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

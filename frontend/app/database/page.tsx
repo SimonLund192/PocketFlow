@@ -205,7 +205,15 @@ function renderValue(value: any): string {
     if (value instanceof Date) {
       return new Date(value).toLocaleString();
     }
-    return JSON.stringify(value);
+    // Try to parse ISO date strings
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      try {
+        return new Date(value).toLocaleString();
+      } catch (e) {
+        return value;
+      }
+    }
+    return JSON.stringify(value, null, 0);
   }
   if (typeof value === "boolean") {
     return value ? "✓" : "✗";

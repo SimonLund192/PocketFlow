@@ -40,7 +40,7 @@ async def get_collection_data(
     user_id = str(user_doc["_id"])
     
     # Determine if collection should be filtered by user
-    user_collections = ["transactions", "categories", "budgets", "goals"]
+    user_collections = ["transactions", "categories", "budgets", "budget_line_items", "goals"]
     
     if collection_name in user_collections:
         # Filter by user_id
@@ -60,6 +60,11 @@ async def get_collection_data(
             doc["_id"] = str(doc["_id"])
         if "user_id" in doc:
             doc["user_id"] = str(doc["user_id"])
+        # Convert budget_id and category_id for budget_line_items
+        if "budget_id" in doc:
+            doc["budget_id"] = str(doc["budget_id"])
+        if "category_id" in doc:
+            doc["category_id"] = str(doc["category_id"])
     
     return documents
 
@@ -90,7 +95,7 @@ async def get_collection_count(
     user_id = str(user_doc["_id"])
     
     # Determine if collection should be filtered by user
-    user_collections = ["transactions", "categories", "budgets", "goals"]
+    user_collections = ["transactions", "categories", "budgets", "budget_line_items", "goals"]
     
     if collection_name in user_collections:
         count = await collection.count_documents({"user_id": user_id})
