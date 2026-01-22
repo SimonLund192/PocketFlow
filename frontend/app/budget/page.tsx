@@ -3,7 +3,16 @@
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
 import { TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { categoriesApi, Category } from "@/lib/categories-api";
+import { getOrCreateBudget, Budget } from "@/lib/budgets-api";
+import { 
+  getBudgetLineItems, 
+  createBudgetLineItem, 
+  updateBudgetLineItem, 
+  deleteBudgetLineItem,
+  BudgetLineItem 
+} from "@/lib/budget-line-items-api";
 
 interface BudgetItem {
   id: string;
@@ -47,20 +56,117 @@ function StatCard({ title, value, subtitle, trend }: StatCardProps) {
 }
 
 export default function BudgetPage() {
-  const [selectedMonth, setSelectedMonth] = useState("januar 2026");
+  // Get current month in YYYY-MM format
+  const getCurrentMonth = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [activeTab, setActiveTab] = useState<TabType>("income");
   const [user1Name, setUser1Name] = useState("Simon Lund");
   const [user2Name, setUser2Name] = useState("Aya Laurvigen");
 
+  // Backend data state
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
+  const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
   // User 1 Income items
-  const [user1IncomeItems, setUser1IncomeItems] = useState<BudgetItem[]>([
-    { id: "1", name: "Neuralogics", category: "Salary", amount: 13837 },
-    { id: "2", name: "SU", category: "Income", amount: 4382 },
-    { id: "3", name: "SU lån", category: "Income", amount: 3799 },
-  ]);
+  const [user1IncomeItems, setUser1IncomeItems] = useState<BudgetItem[]>([]);
 
   // User 2 Income items
   const [user2IncomeItems, setUser2IncomeItems] = useState<BudgetItem[]>([]);
+
+  // Refs for debouncing saves
+  const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const savingItems = useRef<Set<string>>(new Set());
+  const createdItems = useRef<Set<string>>(new Set()); // Track items already created in backend
+
+  // Load categories on mount
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        console.log('Loading categories...');
+        const allCategories = await categoriesApi.getAll();
+        console.log('Loaded categories:', allCategories);
+        setCategories(allCategories);
+        const incomeOnly = allCategories.filter(cat => cat.type === 'income');
+        console.log('Income categories:', incomeOnly);
+        setIncomeCategories(incomeOnly);
+      } catch (error) {
+        console.error('Failed to load categories:', error);
+      }
+    };
+    loadCategories();
+  }, []);
+
+  // Load budget and line items when month changes
+  useEffect(() => {
+    const loadBudgetData = async () => {
+      if (!selectedMonth) return;
+      
+      console.log('Loading budget data for month:', selectedMonth);
+      setIsLoading(true);
+      try {
+        // Clear created items tracking when loading new data
+        createdItems.current.clear();
+        
+        // Get or create budget for the month
+        console.log('Getting or creating budget...');
+        const budget = await getOrCreateBudget(selectedMonth);
+        console.log('Budget loaded:', budget);
+        setCurrentBudget(budget);
+
+        // Load budget line items
+        console.log('Loading budget line items...');
+        const lineItems = await getBudgetLineItems(budget.id);
+        console.log('Loaded line items:', lineItems);
+        
+        // Track all loaded items as created
+        lineItems.forEach(item => createdItems.current.add(item.id));
+        
+        // Separate line items by owner_slot and category type
+        const user1Income = lineItems.filter(item => item.owner_slot === 'user1');
+        const user2Income = lineItems.filter(item => item.owner_slot === 'user2');
+
+        console.log('User1 income items:', user1Income);
+        console.log('User2 income items:', user2Income);
+
+        // Convert BudgetLineItem to BudgetItem format
+        setUser1IncomeItems(user1Income.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
+
+        setUser2IncomeItems(user2Income.map(item => ({
+          id: item.id,
+          name: item.name,
+          category: item.category_id,
+          amount: item.amount
+        })));
+      } catch (error) {
+        console.error('Failed to load budget data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadBudgetData();
+  }, [selectedMonth]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      // Clear all pending save timeouts
+      saveTimeouts.current.forEach(timeout => clearTimeout(timeout));
+      saveTimeouts.current.clear();
+    };
+  }, []);
+
 
   // Shared Expenses
   const [sharedExpenseItems, setSharedExpenseItems] = useState<BudgetItem[]>([]);
@@ -76,8 +182,177 @@ export default function BudgetPage() {
   const [user1PersonalItems, setUser1PersonalItems] = useState<BudgetItem[]>([]);
   const [user2PersonalItems, setUser2PersonalItems] = useState<BudgetItem[]>([]);
 
-  // Generic functions for managing items
-  const addItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, category: string = "") => {
+  // Generic functions for managing items with backend persistence
+  const addItem = async (
+    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, 
+    ownerSlot: 'user1' | 'user2' | 'shared',
+    category: string = ""
+  ) => {
+    if (!currentBudget) {
+      console.error('No budget loaded');
+      return;
+    }
+
+    const newItem: BudgetItem = {
+      id: `temp-${Date.now()}`, // Temporary ID until saved to backend
+      name: "",
+      category: category,
+      amount: 0,
+    };
+    setter((prev) => [...prev, newItem]);
+  };
+
+  const saveItem = async (
+    item: BudgetItem,
+    ownerSlot: 'user1' | 'user2' | 'shared',
+    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>
+  ) => {
+    if (!currentBudget) {
+      console.log('No budget loaded, cannot save');
+      return;
+    }
+
+    // For new items (temp ID), require all fields to be filled
+    if (item.id.startsWith('temp-')) {
+      if (!item.name || !item.category || item.amount <= 0) {
+        console.log('Incomplete new item, waiting for all fields:', item);
+        return; // Don't save incomplete new items
+      }
+    } else {
+      // For existing items, just need at least one field
+      if (!item.name && !item.category && !item.amount) {
+        console.log('Nothing to update');
+        return;
+      }
+    }
+
+    // Prevent duplicate saves for the same item
+    if (savingItems.current.has(item.id)) {
+      console.log('Save already in progress for', item.id);
+      return;
+    }
+
+    savingItems.current.add(item.id);
+
+    try {
+      // If item has temp ID, create new item in backend
+      if (item.id.startsWith('temp-')) {
+        // Check if this temp item was already created
+        if (createdItems.current.has(item.id)) {
+          console.log('Item already created, skipping:', item.id);
+          savingItems.current.delete(item.id);
+          return;
+        }
+
+        console.log('Creating new budget line item:', item);
+        const created = await createBudgetLineItem({
+          budget_id: currentBudget.id,
+          name: item.name,
+          category_id: item.category,
+          amount: item.amount,
+          owner_slot: ownerSlot
+        });
+
+        console.log('Created budget line item with ID:', created.id);
+        
+        // Mark this temp item as created
+        createdItems.current.add(item.id);
+        
+        // Update the item with the real ID from backend
+        setter(prev => prev.map(i => 
+          i.id === item.id ? { ...i, id: created.id } : i
+        ));
+        
+        // Remove temp ID from created set and add real ID
+        createdItems.current.delete(item.id);
+        createdItems.current.add(created.id);
+      } else {
+        // Update existing item (already has real backend ID)
+        console.log('Updating existing budget line item:', item.id);
+        await updateBudgetLineItem(item.id, {
+          name: item.name,
+          category_id: item.category,
+          amount: item.amount,
+          owner_slot: ownerSlot
+        });
+      }
+    } catch (error) {
+      console.error('Failed to save budget line item:', error);
+      // Remove from created set on error so it can be retried
+      if (item.id.startsWith('temp-')) {
+        createdItems.current.delete(item.id);
+      }
+    } finally {
+      savingItems.current.delete(item.id);
+    }
+  };
+
+  const removeItem = async (
+    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, 
+    id: string
+  ) => {
+    try {
+      // Only call API if it's not a temp ID
+      if (!id.startsWith('temp-')) {
+        await deleteBudgetLineItem(id);
+      }
+      setter((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error('Failed to delete budget line item:', error);
+    }
+  };
+
+  const updateItem = async (
+    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>,
+    id: string,
+    field: keyof BudgetItem,
+    value: any,
+    ownerSlot: 'user1' | 'user2' | 'shared'
+  ) => {
+    console.log(`Updating item ${id}, field: ${field}, value:`, value);
+    
+    // Clear any existing timeout for this item
+    const existingTimeout = saveTimeouts.current.get(id);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+      console.log(`Cleared existing timeout for ${id}`);
+    }
+
+    // Capture the updated item in a ref to avoid closure issues
+    const itemToSaveRef = { current: null as BudgetItem | null };
+    
+    // Update local state immediately for responsive UI
+    setter((prev) => {
+      return prev.map((item) => {
+        if (item.id === id) {
+          const updated: BudgetItem = { ...item, [field]: value };
+          itemToSaveRef.current = updated; // Capture the updated item
+          console.log('Updated item:', updated);
+          return updated;
+        }
+        return item;
+      });
+    });
+
+    // Debounce the save to backend
+    const itemToSave = itemToSaveRef.current;
+    if (itemToSave) {
+      console.log(`Setting timeout to save item ${id} in 800ms`, itemToSave);
+      
+      const timeout = setTimeout(() => {
+        console.log(`Timeout fired, calling saveItem for ${id}`, itemToSave);
+        saveItem(itemToSave, ownerSlot, setter);
+        saveTimeouts.current.delete(id);
+      }, 800);
+      
+      saveTimeouts.current.set(id, timeout);
+    } else {
+      console.log('No updated item found for', id);
+    }
+  };
+
+  // Simple local-only functions for non-income tabs
+  const addItemLocal = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, category: string = "") => {
     const newItem: BudgetItem = {
       id: Date.now().toString(),
       name: "",
@@ -87,11 +362,11 @@ export default function BudgetPage() {
     setter((prev) => [...prev, newItem]);
   };
 
-  const removeItem = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string) => {
+  const removeItemLocal = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string) => {
     setter((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const updateItem = (
+  const updateItemLocal = (
     setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>,
     id: string,
     field: keyof BudgetItem,
@@ -100,6 +375,51 @@ export default function BudgetPage() {
     setter((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
+  };
+
+  // Manual save function for Save Budget button
+  const saveBudget = async () => {
+    if (!currentBudget) {
+      alert('No budget loaded. Please wait for the page to load.');
+      return;
+    }
+
+    console.log('=== MANUAL SAVE TRIGGERED ===');
+    console.log('User 1 income items:', user1IncomeItems);
+    console.log('User 2 income items:', user2IncomeItems);
+
+    let savedCount = 0;
+    let errorCount = 0;
+
+    // Save all User 1 income items
+    for (const item of user1IncomeItems) {
+      try {
+        await saveItem(item, 'user1', setUser1IncomeItems);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save user1 item:', item, error);
+        errorCount++;
+      }
+    }
+
+    // Save all User 2 income items
+    for (const item of user2IncomeItems) {
+      try {
+        await saveItem(item, 'user2', setUser2IncomeItems);
+        savedCount++;
+      } catch (error) {
+        console.error('Failed to save user2 item:', item, error);
+        errorCount++;
+      }
+    }
+
+    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
+    
+    if (errorCount > 0) {
+      alert(`Budget saved with ${errorCount} errors. Check console for details.`);
+    } else {
+      alert(`Budget saved successfully! ${savedCount} items saved.`);
+    }
   };
 
   // Calculate totals
@@ -129,15 +449,12 @@ export default function BudgetPage() {
         subtitle="Welcome Simon Lund" 
         breadcrumb={["Dashboard", "Budget"]}
         action={
-          <select
+          <input
+            type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
             className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="januar 2026">januar 2026</option>
-            <option value="december 2025">december 2025</option>
-            <option value="november 2025">november 2025</option>
-          </select>
+          />
         }
       />
 
@@ -221,7 +538,7 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "name", e.target.value)
+                            updateItem(setUser1IncomeItems, item.id, "name", e.target.value, "user1")
                           }
                           placeholder="Name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -237,21 +554,20 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "category", e.target.value)
+                            updateItem(setUser1IncomeItems, item.id, "category", e.target.value, "user1")
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="">Select Category</option>
-                          <option value="Salary">Salary</option>
-                          <option value="Income">Income</option>
-                          <option value="Bonus">Bonus</option>
-                          <option value="Other">Other</option>
+                          {incomeCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
                         </select>
                         <input
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser1IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItem(setUser1IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0, "user1")
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -261,7 +577,7 @@ export default function BudgetPage() {
                   ))}
 
                   <button
-                    onClick={() => addItem(setUser1IncomeItems, "Income")}
+                    onClick={() => addItem(setUser1IncomeItems, "user1", "")}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
@@ -287,7 +603,7 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "name", e.target.value)
+                            updateItem(setUser2IncomeItems, item.id, "name", e.target.value, "user2")
                           }
                           placeholder="Name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -303,21 +619,20 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "category", e.target.value)
+                            updateItem(setUser2IncomeItems, item.id, "category", e.target.value, "user2")
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                           <option value="">Select Category</option>
-                          <option value="Salary">Salary</option>
-                          <option value="Income">Income</option>
-                          <option value="Bonus">Bonus</option>
-                          <option value="Other">Other</option>
+                          {incomeCategories.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
                         </select>
                         <input
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser2IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItem(setUser2IncomeItems, item.id, "amount", parseFloat(e.target.value) || 0, "user2")
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -327,13 +642,28 @@ export default function BudgetPage() {
                   ))}
 
                   <button
-                    onClick={() => addItem(setUser2IncomeItems, "Income")}
+                    onClick={() => addItem(setUser2IncomeItems, "user2", "")}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
                     Add Item
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Save Budget Button for Income Tab */}
+            {activeTab === "income" && (
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={saveBudget}
+                  className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z" />
+                  </svg>
+                  Save Budget
+                </button>
               </div>
             )}
 
@@ -348,13 +678,13 @@ export default function BudgetPage() {
                         type="text"
                         value={item.name}
                         onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "name", e.target.value)
+                          updateItemLocal(setSharedExpenseItems, item.id, "name", e.target.value)
                         }
                         placeholder="Expense name"
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <button
-                        onClick={() => removeItem(setSharedExpenseItems, item.id)}
+                        onClick={() => removeItemLocal(setSharedExpenseItems, item.id)}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4 text-gray-400" />
@@ -364,7 +694,7 @@ export default function BudgetPage() {
                       <select
                         value={item.category}
                         onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "category", e.target.value)
+                          updateItemLocal(setSharedExpenseItems, item.id, "category", e.target.value)
                         }
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
@@ -378,7 +708,7 @@ export default function BudgetPage() {
                         type="number"
                         value={item.amount}
                         onChange={(e) =>
-                          updateItem(setSharedExpenseItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                          updateItemLocal(setSharedExpenseItems, item.id, "amount", parseFloat(e.target.value) || 0)
                         }
                         placeholder="Amount"
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -387,7 +717,7 @@ export default function BudgetPage() {
                   </div>
                 ))}
                 <button
-                  onClick={() => addItem(setSharedExpenseItems)}
+                  onClick={() => addItemLocal(setSharedExpenseItems)}
                   className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                 >
                   <Plus className="w-4 h-4" />
@@ -409,13 +739,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "name", e.target.value)
+                            updateItemLocal(setUser1PersonalExpenses, item.id, "name", e.target.value)
                           }
                           placeholder="Expense name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItem(setUser1PersonalExpenses, item.id)}
+                          onClick={() => removeItemLocal(setUser1PersonalExpenses, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -425,7 +755,7 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "category", e.target.value)
+                            updateItemLocal(setUser1PersonalExpenses, item.id, "category", e.target.value)
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
@@ -440,7 +770,7 @@ export default function BudgetPage() {
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItemLocal(setUser1PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -449,7 +779,7 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItem(setUser1PersonalExpenses)}
+                    onClick={() => addItemLocal(setUser1PersonalExpenses)}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
@@ -467,13 +797,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "name", e.target.value)
+                            updateItemLocal(setUser2PersonalExpenses, item.id, "name", e.target.value)
                           }
                           placeholder="Expense name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItem(setUser2PersonalExpenses, item.id)}
+                          onClick={() => removeItemLocal(setUser2PersonalExpenses, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -483,7 +813,7 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "category", e.target.value)
+                            updateItemLocal(setUser2PersonalExpenses, item.id, "category", e.target.value)
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
@@ -498,7 +828,7 @@ export default function BudgetPage() {
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItemLocal(setUser2PersonalExpenses, item.id, "amount", parseFloat(e.target.value) || 0)
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -507,7 +837,7 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItem(setUser2PersonalExpenses)}
+                    onClick={() => addItemLocal(setUser2PersonalExpenses)}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
@@ -528,13 +858,13 @@ export default function BudgetPage() {
                         type="text"
                         value={item.name}
                         onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "name", e.target.value)
+                          updateItemLocal(setSharedSavingsItems, item.id, "name", e.target.value)
                         }
                         placeholder="Savings goal name"
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       />
                       <button
-                        onClick={() => removeItem(setSharedSavingsItems, item.id)}
+                        onClick={() => removeItemLocal(setSharedSavingsItems, item.id)}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4 text-gray-400" />
@@ -544,7 +874,7 @@ export default function BudgetPage() {
                       <select
                         value={item.category}
                         onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "category", e.target.value)
+                          updateItemLocal(setSharedSavingsItems, item.id, "category", e.target.value)
                         }
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                       >
@@ -558,7 +888,7 @@ export default function BudgetPage() {
                         type="number"
                         value={item.amount}
                         onChange={(e) =>
-                          updateItem(setSharedSavingsItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                          updateItemLocal(setSharedSavingsItems, item.id, "amount", parseFloat(e.target.value) || 0)
                         }
                         placeholder="Amount"
                         className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -567,7 +897,7 @@ export default function BudgetPage() {
                   </div>
                 ))}
                 <button
-                  onClick={() => addItem(setSharedSavingsItems)}
+                  onClick={() => addItemLocal(setSharedSavingsItems)}
                   className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                 >
                   <Plus className="w-4 h-4" />
@@ -589,13 +919,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalItems, item.id, "name", e.target.value)
+                            updateItemLocal(setUser1PersonalItems, item.id, "name", e.target.value)
                           }
                           placeholder="Item name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItem(setUser1PersonalItems, item.id)}
+                          onClick={() => removeItemLocal(setUser1PersonalItems, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -605,7 +935,7 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalItems, item.id, "category", e.target.value)
+                            updateItemLocal(setUser1PersonalItems, item.id, "category", e.target.value)
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
@@ -618,7 +948,7 @@ export default function BudgetPage() {
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser1PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItemLocal(setUser1PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -627,7 +957,7 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItem(setUser1PersonalItems)}
+                    onClick={() => addItemLocal(setUser1PersonalItems)}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
@@ -645,13 +975,13 @@ export default function BudgetPage() {
                           type="text"
                           value={item.name}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalItems, item.id, "name", e.target.value)
+                            updateItemLocal(setUser2PersonalItems, item.id, "name", e.target.value)
                           }
                           placeholder="Item name"
                           className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         />
                         <button
-                          onClick={() => removeItem(setUser2PersonalItems, item.id)}
+                          onClick={() => removeItemLocal(setUser2PersonalItems, item.id)}
                           className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-gray-400" />
@@ -661,7 +991,7 @@ export default function BudgetPage() {
                         <select
                           value={item.category}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalItems, item.id, "category", e.target.value)
+                            updateItemLocal(setUser2PersonalItems, item.id, "category", e.target.value)
                           }
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
@@ -674,7 +1004,7 @@ export default function BudgetPage() {
                           type="number"
                           value={item.amount}
                           onChange={(e) =>
-                            updateItem(setUser2PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
+                            updateItemLocal(setUser2PersonalItems, item.id, "amount", parseFloat(e.target.value) || 0)
                           }
                           placeholder="Amount"
                           className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -683,7 +1013,7 @@ export default function BudgetPage() {
                     </div>
                   ))}
                   <button
-                    onClick={() => addItem(setUser2PersonalItems)}
+                    onClick={() => addItemLocal(setUser2PersonalItems)}
                     className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-sm text-gray-600 hover:text-indigo-600"
                   >
                     <Plus className="w-4 h-4" />
