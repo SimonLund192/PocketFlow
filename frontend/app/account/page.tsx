@@ -18,8 +18,26 @@ interface EditingCategory {
 }
 
 export default function Settings() {
+  // Initialize activeTab with default value (no localStorage during SSR)
   const [activeTab, setActiveTab] = useState("Account");
+  const [isTabInitialized, setIsTabInitialized] = useState(false);
   const [partnerName, setPartnerName] = useState("Aya Laurvigen");
+  
+  // Load saved tab from localStorage after component mounts (client-side only)
+  useEffect(() => {
+    const savedTab = localStorage.getItem('settingsActiveTab');
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+    setIsTabInitialized(true);
+  }, []);
+  
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    if (isTabInitialized) {
+      localStorage.setItem('settingsActiveTab', activeTab);
+    }
+  }, [activeTab, isTabInitialized]);
   
   // Helper to get color class
   const getColorClass = (color: string) => {
@@ -254,11 +272,13 @@ export default function Settings() {
 
       {/* Main Content */}
       <div className="p-8">
-        {/* Tabs */}
-        <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+        {/* Tabs - only render after initialization to prevent flash */}
+        {isTabInitialized && (
+          <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} />
+        )}
 
         {/* Content Grid */}
-        {activeTab === "Account" && (
+        {isTabInitialized && activeTab === "Account" && (
           <div className="grid grid-cols-2 gap-6">
             {/* Welcome Card */}
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
@@ -384,7 +404,7 @@ export default function Settings() {
         )}
 
         {/* Profile Tab */}
-        {activeTab === "Profile" && (
+        {isTabInitialized && activeTab === "Profile" && (
           <div className="space-y-6">
             {/* Top Row - User Profile Cards */}
             <div className="grid grid-cols-2 gap-6">
@@ -567,7 +587,7 @@ export default function Settings() {
         )}
 
         {/* Categories Tab */}
-        {activeTab === "Categories" && (
+        {isTabInitialized && activeTab === "Categories" && (
           <div className="grid grid-cols-[480px_1fr] gap-6">
             {/* Left Column - Create Category Form */}
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl h-fit">
@@ -946,7 +966,7 @@ export default function Settings() {
         )}
 
         {/* Admin Tab */}
-        {activeTab === "Admin" && (
+        {isTabInitialized && activeTab === "Admin" && (
           <div className="max-w-4xl">
             {/* Warning Banner */}
             <div className="bg-red-50 border-2 border-red-200 rounded-lg p-6 mb-8">
