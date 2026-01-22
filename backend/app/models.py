@@ -114,9 +114,9 @@ class LegacyCategory(LegacyCategoryBase):
 class CategoryBase(BaseModel):
     """Base model for category data"""
     name: str = Field(..., min_length=1, max_length=100)
-    type: Literal["income", "expense"] = Field(
+    type: Literal["income", "expense", "savings"] = Field(
         ..., 
-        description="Category type: income or expense"
+        description="Category type: income, expense, or savings"
     )
     icon: Optional[str] = Field(None, max_length=50)
     color: Optional[str] = Field(None, max_length=20)
@@ -130,7 +130,7 @@ class CategoryCreate(CategoryBase):
 class CategoryUpdate(BaseModel):
     """Model for updating a category (all fields optional)"""
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    type: Optional[Literal["income", "expense"]] = None
+    type: Optional[Literal["income", "expense", "savings"]] = None
     icon: Optional[str] = Field(None, max_length=50)
     color: Optional[str] = Field(None, max_length=20)
 
