@@ -54,6 +54,7 @@ class DashboardStats(BaseModel):
     goals_achieved: int
     income_change: float
     savings_change: float
+    expenses_change: float
 
 
 class BalanceTrend(BaseModel):

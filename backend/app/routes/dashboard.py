@@ -1,41 +1,52 @@
 from fastapi import APIRouter
 from typing import List
 from app.models import DashboardStats, BalanceTrend, ExpenseBreakdown
-from app.database import transactions_collection, goals_collection
+from app.database import transactions_collection, goals_collection, budget_line_items_collection, categories_collection, budgets_collection
 from datetime import datetime, timedelta
+from bson import ObjectId
 
 router = APIRouter()
 
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats():
-    """Get dashboard statistics"""
-    # Calculate current month stats
-    now = datetime.now()
-    first_day_current = datetime(now.year, now.month, 1)
+    """Get dashboard statistics - calculates from ALL budgets (not just current month)"""
+    # Calculate budget stats from ALL budget line items across all budgets
+    total_income = 0
+    shared_expenses = 0
+    personal_expenses = 0  # user1 + user2 expenses
+    total_savings = 0
     
-    # Get current month transactions
-    current_income = 0
-    current_expenses = 0
-    current_savings = 0
+    # Get ALL budget line items with their categories
+    async for item in budget_line_items_collection.find():
+        category = await categories_collection.find_one({"_id": item["category_id"]})
+        
+        if category:
+            category_type = category.get("type")
+            amount = item.get("amount", 0)
+            owner_slot = item.get("owner_slot", "")
+            
+            if category_type == "income":
+                total_income += amount
+            elif category_type == "expense":
+                if owner_slot == "shared":
+                    shared_expenses += amount
+                elif owner_slot in ["user1", "user2"]:
+                    personal_expenses += amount
+            elif category_type == "savings":
+                total_savings += amount
+            # Note: "fun" category is not included in NET INCOME calculation
     
-    async for transaction in transactions_collection.find({"date": {"$gte": first_day_current}}):
-        if transaction["type"] == "income":
-            current_income += transaction["amount"]
-        elif transaction["type"] == "expense":
-            current_expenses += transaction["amount"]
-        elif transaction["type"] == "savings":
-            current_savings += transaction["amount"]
-    
-    net_income = current_income - current_expenses
+    # NET INCOME = Total Income - Shared Expenses - Personal Expenses
+    net_income = total_income - shared_expenses - personal_expenses
     
     # Count achieved goals
     goals_achieved = await goals_collection.count_documents({"achieved": True})
     
     return DashboardStats(
         net_income=net_income,
-        savings=current_savings,
-        expenses=current_expenses,
+        savings=total_savings,
+        expenses=shared_expenses + personal_expenses,
         goals_achieved=goals_achieved,
         income_change=0.0,
         savings_change=0.0,
