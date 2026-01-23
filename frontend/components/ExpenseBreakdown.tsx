@@ -1,92 +1,120 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Home, Car, Shield, Globe, Smartphone } from "lucide-react";
+import { Home, Car, Shield, Globe, Smartphone, ShoppingBag, Zap, Coffee, CreditCard } from "lucide-react";
+import { getExpenseBreakdown, ExpenseBreakdown as ExpenseBreakdownType } from "@/lib/dashboard-api";
 
-interface ExpenseItem {
-  name: string;
-  amount: string;
-  percentage: number;
-  color: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const expenses: ExpenseItem[] = [
-  {
-    name: "Rent",
-    amount: "17.952 kr",
-    percentage: 81,
-    color: "bg-purple-500",
-    icon: Home,
-  },
-  {
-    name: "Bil",
-    amount: "1.720 kr",
-    percentage: 8,
-    color: "bg-red-500",
-    icon: Car,
-  },
-  {
-    name: "Forsikring",
-    amount: "924 kr",
-    percentage: 4,
-    color: "bg-yellow-500",
-    icon: Shield,
-  },
-  {
-    name: "Website",
-    amount: "408 kr",
-    percentage: 2,
-    color: "bg-pink-500",
-    icon: Globe,
-  },
-  {
-    name: "Mobil",
-    amount: "354 kr",
-    percentage: 2,
-    color: "bg-pink-500",
-    icon: Smartphone,
-  },
-];
+// Helper to map category names to colors/icons
+const getCategoryStyle = (categoryName: string) => {
+  const normalized = categoryName.toLowerCase();
+  
+  if (normalized.includes("rent") || normalized.includes("housing")) return { color: "bg-purple-500", icon: Home };
+  if (normalized.includes("car") || normalized.includes("transport")) return { color: "bg-red-500", icon: Car };
+  if (normalized.includes("insurance")) return { color: "bg-yellow-500", icon: Shield };
+  if (normalized.includes("web") || normalized.includes("internet")) return { color: "bg-blue-500", icon: Globe };
+  if (normalized.includes("phone") || normalized.includes("mobile")) return { color: "bg-pink-500", icon: Smartphone };
+  if (normalized.includes("grocer") || normalized.includes("food")) return { color: "bg-green-500", icon: ShoppingBag };
+  if (normalized.includes("util")) return { color: "bg-orange-500", icon: Zap };
+  if (normalized.includes("fun") || normalized.includes("entertainment")) return { color: "bg-indigo-500", icon: Coffee };
+  
+  return { color: "bg-gray-500", icon: CreditCard };
+};
 
 export default function ExpenseBreakdown() {
+  const [data, setData] = useState<ExpenseBreakdownType[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const breakdown = await getExpenseBreakdown();
+        setData(breakdown);
+      } catch (error) {
+        console.error("Failed to load expense breakdown:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('da-DK', {
+      style: 'decimal',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount) + ' kr';
+  };
+
+  if (loading) {
+     return (
+       <Card className="p-6 bg-white h-full flex flex-col">
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">
+            Monthly Expenses
+          </h3>
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+             Loading...
+          </div>
+       </Card>
+     );
+  }
+
+  if (data.length === 0) {
+      return (
+        <Card className="p-6 bg-white h-full flex flex-col">
+             <h3 className="text-lg font-semibold text-gray-900 mb-6">
+               Monthly Expenses
+             </h3>
+             <div className="flex-1 flex items-center justify-center text-gray-500">
+                No expenses
+             </div>
+        </Card>
+      );
+  }
+
   return (
-    <Card className="p-6 bg-white">
+    <Card className="p-6 bg-white h-full">
       <h3 className="text-lg font-semibold text-gray-900 mb-6">
-        Monthly Expenses Breakdown
+        Monthly Expenses
       </h3>
 
       {/* Percentage Bar */}
-      <div className="flex h-3 rounded-full overflow-hidden mb-6">
-        {expenses.map((expense, index) => (
-          <div
-            key={index}
-            className={expense.color}
-            style={{ width: `${expense.percentage}%` }}
-          />
-        ))}
+      <div className="flex h-3 rounded-full overflow-hidden mb-6 bg-gray-100">
+        {data.map((item, index) => {
+           const style = getCategoryStyle(item.category);
+           return (
+            <div
+              key={index}
+              className={`${style.color}`}
+              style={{ width: `${item.percentage}%` }}
+              title={`${item.category}: ${item.percentage}%`}
+            />
+           );
+        })}
       </div>
 
       {/* Expense List */}
       <div className="space-y-4">
-        {expenses.map((expense, index) => {
-          const Icon = expense.icon;
+        {data.map((item, index) => {
+          const style = getCategoryStyle(item.category);
+          const Icon = style.icon;
           return (
             <div key={index} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full ${expense.color} flex items-center justify-center`}>
-                  <Icon className="w-5 h-5 text-white" />
+                <div className={`w-8 h-8 rounded-full ${style.color} flex items-center justify-center shrink-0`}>
+                  <Icon className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-900">
-                  {expense.name}
+                <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">
+                  {item.category}
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-semibold text-gray-900">
-                  {expense.amount}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                  {formatCurrency(item.amount)}
                 </span>
-                <span className="text-sm font-bold text-gray-900 w-8 text-right">
-                  {expense.percentage}%
+                <span className="text-sm font-bold text-gray-500 w-10 text-right">
+                  {item.percentage}%
                 </span>
               </div>
             </div>

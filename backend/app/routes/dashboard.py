@@ -130,30 +130,52 @@ async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown():
-    """Get expense breakdown by category"""
-    # Calculate expenses by category for current month
-    now = datetime.now()
-    first_day = datetime(now.year, now.month, 1)
+async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+    """
+    Get expense breakdown by category for the current user's current month budget.
+    Only includes items where category type is 'expense' (Shared + Personal).
+    """
+    current_month_str = datetime.now().strftime("%Y-%m")
     
-    pipeline = [
-        {"$match": {"type": "expense", "date": {"$gte": first_day}}},
-        {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}}
-    ]
+    # Try to find budget for current month first
+    budget = await budgets_collection.find_one({
+        "month": current_month_str,
+        "user_id": user_id
+    })
     
+    if not budget:
+        return []
+        
+    budget_id = budget["_id"]
     category_totals = {}
     total_expenses = 0
     
-    async for result in transactions_collection.aggregate(pipeline):
-        category_totals[result["_id"]] = result["total"]
-        total_expenses += result["total"]
+    # Get budget line items
+    async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+        category = await categories_collection.find_one({"_id": item["category_id"]})
+        if not category:
+            continue
+            
+        # Filter for Expense type
+        if category.get("type") != "expense":
+            continue
+            
+        # Includes Shared and Personal (user1/user2)
+        # Note: If we wanted to restrict personal to ONLY the current user slot, we might need more logic
+        # But request says "categories from shared expenses and personal expenses" which usually implies all expenses in the budget.
+        
+        amount = item.get("amount", 0)
+        cat_name = category.get("name", "Unknown")
+        
+        category_totals[cat_name] = category_totals.get(cat_name, 0) + amount
+        total_expenses += amount
     
     # Calculate percentages
     breakdown = []
-    for category, amount in category_totals.items():
+    for category_name, amount in category_totals.items():
         percentage = (amount / total_expenses * 100) if total_expenses > 0 else 0
         breakdown.append(ExpenseBreakdown(
-            category=category,
+            category=category_name,
             amount=amount,
             percentage=round(percentage, 1)
         ))
