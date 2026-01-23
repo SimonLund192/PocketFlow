@@ -70,25 +70,62 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/balance-trends", response_model=List[BalanceTrend])
-async def get_balance_trends():
-    """Get balance trends for chart"""
+async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
+    """
+    Get balance trends for chart (Lifetime Savings).
+    - Shared (Blue): Cumulative 'savings' type with 'shared' slot
+    - Personal (Green): Cumulative 'fun' type
+    """
     trends = []
     
-    # Generate sample data for the last 14 months
-    now = datetime.now()
-    personal_base = 4000
-    shared_base = 8000
+    # 1. Get all budgets for the user, sorted by date ascending
+    cursor = budgets_collection.find({"user_id": user_id}).sort("month", 1)
+    budgets = await cursor.to_list(length=None)
     
-    for i in range(14):
-        month_date = now - timedelta(days=30 * (13 - i))
-        month_str = month_date.strftime("%b. %Y")
+    cumulative_shared = 0.0
+    cumulative_fun = 0.0
+    
+    for budget in budgets:
+        budget_id = budget["_id"]
+        month_str = budget["month"] # "YYYY-MM"
+        
+        # Format month for chart (e.g. "Jan. 2026")
+        dt = datetime.strptime(month_str, "%Y-%m")
+        display_month = dt.strftime("%b. %Y")
+        
+        monthly_shared = 0.0
+        monthly_fun = 0.0
+        
+        # 2. Get line items for this budget
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
+            if not category:
+                continue
+                
+            cat_type = category.get("type")
+            amount = item.get("amount", 0)
+            slot = item.get("owner_slot", "")
+            
+            if cat_type == "savings" and slot == "shared":
+                monthly_shared += amount
+            elif cat_type == "fun":
+                # Assuming all 'fun' is counted as the "Green Line" per requirements
+                monthly_fun += amount
+                
+        cumulative_shared += monthly_shared
+        cumulative_fun += monthly_fun
         
         trends.append(BalanceTrend(
-            month=month_str,
-            personal=personal_base + (i * 500),
-            shared=shared_base + (i * 500) if i < 12 else shared_base + (i * 1000)
+            month=display_month,
+            personal=cumulative_fun, # Mapped to Green line
+            shared=cumulative_shared # Mapped to Blue line
         ))
     
+    # If no data, return empty or sample? Let's return empty if no budgets.
+    if not trends:
+        # Fallback to empty list so chart shows empty state instead of potentially confusing dummy data
+        return []
+        
     return trends
 
 
