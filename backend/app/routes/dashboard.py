@@ -22,8 +22,7 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     })
     
     total_income = 0
-    shared_expenses = 0
-    personal_expenses = 0  # user1 + user2 expenses
+    total_expenses = 0
     total_savings = 0
     
     # Only calculate stats if budget exists for this month
@@ -42,16 +41,19 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
                 if category_type == "income":
                     total_income += amount
                 elif category_type == "expense":
-                    if owner_slot == "shared":
-                        shared_expenses += amount
-                    elif owner_slot in ["user1", "user2"]:
-                        personal_expenses += amount
+                    # Sum of Shared Expenses and Personal Expenses
+                    if owner_slot in ["shared", "user1", "user2"]:
+                        total_expenses += amount
                 elif category_type == "savings":
+                    # Only include Shared Savings
+                    if owner_slot == "shared":
+                        total_savings += amount
+                elif category_type == "fun":
+                    # Include all Fun
                     total_savings += amount
-                # Note: "fun" category is not included in NET INCOME calculation
     
-    # NET INCOME = Total Income - Shared Expenses - Personal Expenses
-    net_income = total_income - shared_expenses - personal_expenses
+    # NET INCOME = Total Income - Total Expenses
+    net_income = total_income - total_expenses
     
     # Count achieved goals
     goals_achieved = await goals_collection.count_documents({"achieved": True})
@@ -59,7 +61,7 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     return DashboardStats(
         net_income=net_income,
         savings=total_savings,
-        expenses=shared_expenses + personal_expenses,
+        expenses=total_expenses,
         goals_achieved=goals_achieved,
         income_change=0.0,
         savings_change=0.0,
