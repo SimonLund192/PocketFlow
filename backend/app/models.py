@@ -70,41 +70,6 @@ class ExpenseBreakdown(BaseModel):
 
 
 # ============================================================================
-# LEGACY CATEGORY MODELS (for backward compatibility with existing routes)
-# ============================================================================
-
-class LegacyCategoryBase(BaseModel):
-    """Legacy category model - kept for backward compatibility"""
-    name: str
-    type: Literal["income", "shared-expenses", "personal-expenses", "shared-savings", "fun"]
-    icon: str
-    color: str
-
-
-class LegacyCategoryCreate(LegacyCategoryBase):
-    pass
-
-
-class LegacyCategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    type: Optional[Literal["income", "shared-expenses", "personal-expenses", "shared-savings", "fun"]] = None
-    icon: Optional[str] = None
-    color: Optional[str] = None
-
-
-class LegacyCategory(LegacyCategoryBase):
-    """Legacy category response"""
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    user_id: str
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str}
-    )
-
-
-# ============================================================================
 # CATEGORIES, BUDGETS, AND BUDGET LINE ITEMS MODELS
 # ============================================================================
 
@@ -294,24 +259,4 @@ class BudgetLineItemWithCategory(BudgetLineItemResponse):
         None, 
         description="Populated category information"
     )
-
-
-class BudgetWithItems(BudgetResponse):
-    """Budget with all line items and populated categories"""
-    line_items: list[BudgetLineItemWithCategory] = Field(
-        default_factory=list,
-        description="All budget line items with resolved categories"
-    )
-
-
-# ============================================================================
-# MIGRATION MODELS (for backward compatibility)
-# ============================================================================
-
-class LegacyBudgetLineItem(BaseModel):
-    """Legacy budget line item that stored category as string"""
-    name: str
-    category: str  # Old: stored as string
-    amount: float
-    owner_slot: Literal["user1", "user2", "shared"]
 

@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from typing import List
 from app.models import DashboardStats, BalanceTrend, ExpenseBreakdown
 from app.database import transactions_collection, goals_collection, budget_line_items_collection, categories_collection, budgets_collection
+from app.dependencies import get_current_user_id
 from datetime import datetime, timedelta
 from bson import ObjectId
 
@@ -9,33 +10,45 @@ router = APIRouter()
 
 
 @router.get("/stats", response_model=DashboardStats)
-async def get_dashboard_stats():
-    """Get dashboard statistics - calculates from ALL budgets (not just current month)"""
-    # Calculate budget stats from ALL budget line items across all budgets
+async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
+    """Get dashboard statistics - calculates from specific budget (current month)"""
+    # Get current month in YYYY-MM format
+    current_month_str = datetime.now().strftime("%Y-%m")
+    
+    # Try to find budget for current month first
+    budget = await budgets_collection.find_one({
+        "month": current_month_str,
+        "user_id": user_id
+    })
+    
     total_income = 0
     shared_expenses = 0
     personal_expenses = 0  # user1 + user2 expenses
     total_savings = 0
     
-    # Get ALL budget line items with their categories
-    async for item in budget_line_items_collection.find():
-        category = await categories_collection.find_one({"_id": item["category_id"]})
+    # Only calculate stats if budget exists for this month
+    if budget:
+        budget_id = budget["_id"]
         
-        if category:
-            category_type = category.get("type")
-            amount = item.get("amount", 0)
-            owner_slot = item.get("owner_slot", "")
+        # Get budget line items for THIS budget only
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
             
-            if category_type == "income":
-                total_income += amount
-            elif category_type == "expense":
-                if owner_slot == "shared":
-                    shared_expenses += amount
-                elif owner_slot in ["user1", "user2"]:
-                    personal_expenses += amount
-            elif category_type == "savings":
-                total_savings += amount
-            # Note: "fun" category is not included in NET INCOME calculation
+            if category:
+                category_type = category.get("type")
+                amount = item.get("amount", 0)
+                owner_slot = item.get("owner_slot", "")
+                
+                if category_type == "income":
+                    total_income += amount
+                elif category_type == "expense":
+                    if owner_slot == "shared":
+                        shared_expenses += amount
+                    elif owner_slot in ["user1", "user2"]:
+                        personal_expenses += amount
+                elif category_type == "savings":
+                    total_savings += amount
+                # Note: "fun" category is not included in NET INCOME calculation
     
     # NET INCOME = Total Income - Shared Expenses - Personal Expenses
     net_income = total_income - shared_expenses - personal_expenses

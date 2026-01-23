@@ -156,7 +156,7 @@ class BudgetLineItemService:
                     type=category["type"],
                     icon=category["icon"],
                     color=category["color"],
-                    is_active=category.get("is_active", True),
+                    # is_active=category.get("is_active", True),
                     created_at=category["created_at"],
                     updated_at=category["updated_at"],
                 )
@@ -231,7 +231,7 @@ class BudgetLineItemService:
                 type=category["type"],
                 icon=category["icon"],
                 color=category["color"],
-                is_active=category.get("is_active", True),
+                # is_active=category.get("is_active", True),
                 created_at=category["created_at"],
                 updated_at=category["updated_at"],
             )
