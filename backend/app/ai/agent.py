@@ -10,7 +10,7 @@ class AIAgent:
         self.client = LLMClient()
         self.available_tools = get_tool_definitions()
 
-    async def process_request(self, request: AIChatRequest) -> AIChatResponse:
+    async def process_request(self, request: AIChatRequest, user_id: str) -> AIChatResponse:
         messages = [msg.model_dump(exclude_none=True) for msg in request.messages]
 
         try:
@@ -54,11 +54,11 @@ class AIAgent:
                         # Execute tool
                         ai_logger.info(f"Executing tool: {function_name} with args: {arguments}")
                         try:
-                            # TODO: Validate args against pydantic models if needed
-                            result = await tool_func(**arguments)
+                            # Pass user_id for safe scoping
+                            result = await tool_func(user_id=user_id, **arguments)
                             content = str(result)
                         except Exception as e:
-                            content = f"Error executing tool: {str(e)}"
+                            content = f"{{\"ok\": False, \"error\": \"{str(e)}\"}}"
                         
                         # Add tool result to conversation
                         messages.append({
