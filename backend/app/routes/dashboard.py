@@ -55,8 +55,86 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     # NET INCOME = Total Income - Total Expenses
     net_income = total_income - total_expenses
     
-    # Count achieved goals
-    goals_achieved = await goals_collection.count_documents({"achieved": True})
+    # Calculate lifetime shared savings for goal achievement calculation
+    pipeline = [
+        # 1. Match budgets for this user
+        {"$match": {"user_id": user_id}},
+        # 2. Lookup line items
+        {
+            "$lookup": {
+                "from": "budget_line_items",
+                "localField": "_id",
+                "foreignField": "budget_id",
+                "as": "items"
+            }
+        },
+        # 3. Unwind items
+        {"$unwind": "$items"},
+        # 4. Lookup category for each item
+        {
+            "$lookup": {
+                "from": "categories",
+                "localField": "items.category_id",
+                "foreignField": "_id",
+                "as": "category"
+            }
+        },
+        # 5. Unwind category (should be 1:1)
+        {"$unwind": "$category"},
+        # 6. Filter for Shared Savings
+        {
+            "$match": {
+                "category.type": "savings",
+                "items.owner_slot": "shared"
+            }
+        },
+        # 7. Sum amount
+        {
+            "$group": {
+                "_id": None,
+                "total_shared_savings": {"$sum": "$items.amount"}
+            }
+        }
+    ]
+    
+    aggregation_result = await budgets_collection.aggregate(pipeline).to_list(length=1)
+    lifetime_shared_savings = aggregation_result[0]["total_shared_savings"] if aggregation_result else 0.0
+    
+    # Calculate achieved goals based on hierarchy
+    goals_achieved_count = 0
+    remaining_savings = lifetime_shared_savings
+    
+    # Get all goals sorted by priority
+    cursor = goals_collection.find({"user_id": user_id}).sort("priority", 1)
+    async for goal in cursor:
+        target = goal.get("target_amount", 0)
+        # Avoid division by zero or weird logic if target is 0. 
+        # If target is 0, is it achieved? Let's say yes, or skip. 
+        # Usually target > 0.
+        if target <= 0:
+            # If target is 0, technically it's achieved instantly? 
+            # Or invalid. Let's assume invalid/skip to be safe, or count it.
+            # Let's count it as achieved if it exists, effectively free.
+            goals_achieved_count += 1
+            continue
+            
+        amount_for_goal = min(remaining_savings, target)
+        
+        # Check completion. Using a small epsilon for float comparison safety? 
+        # Or simplistic >= logic. Standard is fine for currency usually if consistent.
+        if amount_for_goal >= target:
+            goals_achieved_count += 1
+            
+        # Deduct used savings
+        remaining_savings = max(0, remaining_savings - amount_for_goal)
+        
+        # Optimization: If no savings left, subsequent goals with target > 0 won't be achieved
+        if remaining_savings <= 0:
+            # Continue checking if there are 0-target goals? 
+            # Or just break. Assuming remaining goals have target > 0.
+            pass
+            
+    goals_achieved = goals_achieved_count
     
     return DashboardStats(
         net_income=net_income,
