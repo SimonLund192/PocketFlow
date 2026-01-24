@@ -36,6 +36,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import Tabs from "@/components/Tabs";
 import GoalItemsInput, { GoalItem as GoalItemType } from "@/components/GoalItemsInput";
+import ConfirmationDialog from "@/components/ConfirmationDialog";
 
 interface GoalItem {
   url?: string;
@@ -234,6 +235,8 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [totalSharedSavings, setTotalSharedSavings] = useState(0);
   const [totalFunSavings, setTotalFunSavings] = useState(0); // Add totalFunSavings
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [goalToDelete, setGoalToDelete] = useState<string | null>(null);
 
   const recalculateAllGoals = (currentGoals: Goal[], sharedSavings: number, funSavings: number): Goal[] => {
       // Split into two lists
@@ -441,8 +444,6 @@ export default function Goals() {
   };
 
   const handleDeleteGoal = async (goalId: string) => {
-    if (!confirm("Are you sure you want to delete this goal?")) return;
-    
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${goalId}`, {
@@ -476,7 +477,15 @@ export default function Goals() {
 
   const deleteGoalHandler = (goalId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    handleDeleteGoal(goalId);
+    setGoalToDelete(goalId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (goalToDelete) {
+      handleDeleteGoal(goalToDelete);
+      setGoalToDelete(null);
+    }
   };
 
   useEffect(() => {
@@ -837,6 +846,18 @@ export default function Goals() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={confirmDelete}
+        title="Delete Goal"
+        description="Are you sure you want to delete this goal? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+      />
     </div>
   );
 }
