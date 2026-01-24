@@ -743,8 +743,6 @@ export default function BudgetPage() {
                     addButtonText: "Add Item",
                   },
                 ]}
-                saveButtonText="Save Budget"
-                onSave={saveBudget}
               />
             )}
 
@@ -765,8 +763,6 @@ export default function BudgetPage() {
                     addButtonText: "Add Shared Expense",
                   },
                 ]}
-                saveButtonText="Save Shared Expenses"
-                onSave={saveSharedExpenses}
               />
             )}
 
@@ -798,8 +794,6 @@ export default function BudgetPage() {
                     addButtonText: "Add Item",
                   },
                 ]}
-                saveButtonText="Save Personal Expenses"
-                onSave={savePersonalExpenses}
               />
             )}
 
@@ -817,15 +811,13 @@ export default function BudgetPage() {
                     onRemoveItem: (id) => removeItem(setSharedSavingsItems, id),
                     categories: savingsCategories,
                     namePlaceholder: "Savings goal name",
-                    addButtonText: "Add Savings Goal",
+                    addButtonText: "Add Item",
                   },
                 ]}
-                saveButtonText="Save Shared Savings"
-                onSave={saveSharedSavings}
               />
             )}
 
-            {/* Fun Tab */}
+            {/* Fun Items Tab */}
             {activeTab === "fun" && (
               <BudgetTabContent
                 description="Fun spending shared between both users"
@@ -839,11 +831,9 @@ export default function BudgetPage() {
                     onRemoveItem: (id) => removeItem(setSharedFunItems, id),
                     categories: funCategories,
                     namePlaceholder: "Fun activity name",
-                    addButtonText: "Add Fun Activity",
+                    addButtonText: "Add Fun Item",
                   },
                 ]}
-                saveButtonText="Save Fun Items"
-                onSave={saveFunItems}
               />
             )}
           </div>
