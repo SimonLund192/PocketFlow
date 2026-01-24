@@ -34,3 +34,34 @@ Pocketflow/
 │ └── tests/ # pytest integration tests
 ├── docs/ # Developer docs (incl. AUTH_FUTURE.md)
 └── docker-compose.yml # Docker orchestration (backend + MongoDB only)
+
+- Ensure no unused variables are present in the code. Prefix unused arguments with `_` (e.g. `_node`) to satisfy the linter.
+- **Deep Linking:** Ensure filter state, pagination, and active tabs are synchronized with the URL query parameters so users can deeplink to their current view.
+
+# libs/auth
+
+Go 1.25 backend auth library. Production ready library to be used from Chi powered apps.
+
+# libs/pegasus-models
+
+Shared GORM models library.
+
+- Defines common read models like `ProductPage`, `Retailer`, etc.
+- **Note:** `EventStore` is currently defined locally in apps.
+
+# Go generally
+
+- Use `slog` for logging.
+- Base package name is `github.com/kapetacom/pegasus`
+- Verify changes via `go build ./...`
+- Prefer `any` over `interface{}`
+
+# Git
+
+- Never run git commands unless explicitly instructed
+- Never create commits unless explicitly instructed
+
+# Generally
+
+- Try to keep files small and with a single scope, we prefer multiple files over one large if possible.
+- Always write out the plan and ask for approval before starting a new task.
