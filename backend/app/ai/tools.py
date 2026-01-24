@@ -2,8 +2,7 @@ from typing import List, Dict, Any, Callable
 from functools import wraps
 from datetime import datetime
 from bson import ObjectId
-from app.database import transactions_collection, budgets_collection, categories_collection
-from app.models import TransactionCreate
+from app.database import budget_line_items_collection, budgets_collection, categories_collection
 from .schemas import CreateTransactionArgs, ListTransactionsArgs, DeleteTransactionArgs, GetDashboardStatsArgs
 
 # Registry to store available tools
@@ -26,162 +25,362 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
     """
     definitions = []
     
-    # Tool definitions matching the schemas
+    # Updated tool definitions for budget-based system
     definitions.append({
         "type": "function",
         "function": {
-            "name": "create_transaction",
-            "description": "Create a new transaction (expense or income) for the user.",
-            "parameters": CreateTransactionArgs.model_json_schema()
+            "name": "get_budget_summary",
+            "description": "Get budget summary including income, expenses, and savings for the current month or a specific month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "Optional month in YYYY-MM format. Defaults to current month."
+                    }
+                }
+            }
         }
     })
     
     definitions.append({
         "type": "function",
         "function": {
-            "name": "list_transactions",
-            "description": "List existing transactions with optional filtering by date and category.",
-            "parameters": ListTransactionsArgs.model_json_schema()
+            "name": "get_income_breakdown",
+            "description": "Get detailed breakdown of income by category for the current or specified month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "Optional month in YYYY-MM format. Defaults to current month."
+                    }
+                }
+            }
         }
     })
     
     definitions.append({
         "type": "function",
         "function": {
-            "name": "delete_transaction",
-            "description": "Delete a specific transaction by ID.",
-            "parameters": DeleteTransactionArgs.model_json_schema()
+            "name": "get_expense_breakdown",
+            "description": "Get detailed breakdown of expenses by category for the current or specified month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "Optional month in YYYY-MM format. Defaults to current month."
+                    }
+                }
+            }
         }
     })
 
     definitions.append({
         "type": "function",
         "function": {
-            "name": "get_dashboard_stats",
-            "description": "Get current dashboard statistics including total balance, income, expenses.",
-            "parameters": GetDashboardStatsArgs.model_json_schema()
+            "name": "get_savings_breakdown",
+            "description": "Get detailed breakdown of savings and fun spending for the current or specified month.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "Optional month in YYYY-MM format. Defaults to current month."
+                    }
+                }
+            }
+        }
+    })
+
+    definitions.append({
+        "type": "function",
+        "function": {
+            "name": "get_lifetime_savings",
+            "description": "Get lifetime (all-time) savings across all months.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
         }
     })
 
     return definitions
 
 # --- Tool Implementations ---
+# --- Tool Implementations ---
 
-@register_tool("create_transaction")
-async def create_transaction(user_id: str, **kwargs) -> Dict[str, Any]:
+@register_tool("get_budget_summary")
+async def get_budget_summary(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get budget summary for a specific month"""
     try:
-        # Validate args
-        args = CreateTransactionArgs(**kwargs)
+        month = kwargs.get("month", datetime.now().strftime("%Y-%m"))
         
-        # Determine strict category logic (simplified for now)
-        # In a real app we might fetch the Category ID if needed
+        # Find budget for the month
+        budget = await budgets_collection.find_one({
+            "month": month,
+            "user_id": user_id
+        })
         
-        new_transaction_data = {
-            "amount": args.amount,
-            "description": args.description,
-            "category": args.category,
-            "type": args.type,
-            "date": datetime.strptime(args.date, "%Y-%m-%d"),
-            "user_id": user_id # Enforce user scope
-        }
+        if not budget:
+            return {
+                "ok": True,
+                "data": {
+                    "month": month,
+                    "total_income": 0,
+                    "total_expenses": 0,
+                    "total_savings": 0,
+                    "net_income": 0,
+                    "message": f"No budget found for {month}"
+                }
+            }
         
-        result = await transactions_collection.insert_one(new_transaction_data)
+        budget_id = budget["_id"]
+        
+        total_income = 0
+        total_expenses = 0
+        total_savings = 0
+        
+        # Get budget line items
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
+            
+            if category:
+                category_type = category.get("type")
+                amount = item.get("amount", 0)
+                owner_slot = item.get("owner_slot", "")
+                
+                if category_type == "income":
+                    total_income += amount
+                elif category_type == "expense":
+                    total_expenses += amount
+                elif category_type == "savings":
+                    if owner_slot == "shared":
+                        total_savings += amount
+                elif category_type == "fun":
+                    total_savings += amount
+        
+        net_income = total_income - total_expenses
         
         return {
             "ok": True,
             "data": {
-                "transaction_id": str(result.inserted_id),
-                "message": f"Transaction created successfully: {args.description} - {args.amount}"
+                "month": month,
+                "total_income": total_income,
+                "total_expenses": total_expenses,
+                "total_savings": total_savings,
+                "net_income": net_income,
+                "savings_rate": (total_savings / total_income * 100) if total_income > 0 else 0
             }
         }
     except Exception as e:
-        return {"ok": False, "error": str(e), "code": "CREATE_ERROR"}
+        return {"ok": False, "error": str(e), "code": "BUDGET_SUMMARY_ERROR"}
 
-@register_tool("list_transactions")
-async def list_transactions(user_id: str, **kwargs) -> Dict[str, Any]:
+@register_tool("get_income_breakdown")
+async def get_income_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get detailed income breakdown by category"""
     try:
-        args = ListTransactionsArgs(**kwargs)
+        month = kwargs.get("month", datetime.now().strftime("%Y-%m"))
         
-        query: Dict[str, Any] = {"user_id": user_id}
-        
-        if args.start_date or args.end_date:
-            date_query = {}
-            if args.start_date:
-                date_query["$gte"] = datetime.strptime(args.start_date, "%Y-%m-%d")
-            if args.end_date:
-                date_query["$lte"] = datetime.strptime(args.end_date, "%Y-%m-%d")
-            query["date"] = date_query
-            
-        if args.category:
-            query["category"] = args.category # Exact match for simplicity
-            
-        cursor = transactions_collection.find(query).sort("date", -1).limit(args.limit)
-        
-        transactions = []
-        async for txn in cursor:
-            txn["_id"] = str(txn["_id"])
-            if "date" in txn and isinstance(txn["date"], datetime):
-                txn["date"] = txn["date"].strftime("%Y-%m-%d")
-            transactions.append(txn)
-            
-        return {"ok": True, "data": transactions}
-        
-    except Exception as e:
-        return {"ok": False, "error": str(e), "code": "LIST_ERROR"}
-
-@register_tool("delete_transaction")
-async def delete_transaction(user_id: str, **kwargs) -> Dict[str, Any]:
-    try:
-        args = DeleteTransactionArgs(**kwargs)
-        
-        if not ObjectId.is_valid(args.transaction_id):
-             return {"ok": False, "error": "Invalid transaction ID format", "code": "INVALID_ID"}
-
-        # Enforce user ownership deletion
-        result = await transactions_collection.delete_one({
-            "_id": ObjectId(args.transaction_id),
+        budget = await budgets_collection.find_one({
+            "month": month,
             "user_id": user_id
         })
         
-        if result.deleted_count == 1:
-            return {"ok": True, "data": {"message": "Transaction deleted", "id": args.transaction_id}}
-        else:
-            return {"ok": False, "error": "Transaction not found or access denied", "code": "NOT_FOUND"}
-            
-    except Exception as e:
-        return {"ok": False, "error": str(e), "code": "DELETE_ERROR"}
-
-@register_tool("get_dashboard_stats")
-async def get_dashboard_stats(user_id: str, **kwargs) -> Dict[str, Any]:
-    # Reuse or re-implement dashboard logic without importing valid Request dependency
-    # For now, simplistic aggregation to be safe
-    try:
-        pipeline = [
-            {"$match": {"user_id": user_id}},
-            {"$group": {
-                "_id": "$type",
-                "total": {"$sum": "$amount"}
-            }}
-        ]
+        if not budget:
+            return {"ok": True, "data": {"month": month, "income_items": [], "total": 0}}
         
-        stats = {}
-        async for doc in transactions_collection.aggregate(pipeline):
-            stats[doc["_id"]] = doc["total"]
+        budget_id = budget["_id"]
+        income_items = []
+        total = 0
+        
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
             
-        # Basic calculation (simplified compared to full dashboard)
-        income = stats.get("income", 0)
-        expense = stats.get("expense", 0)
-        balance = income - expense
+            if category and category.get("type") == "income":
+                amount = item.get("amount", 0)
+                income_items.append({
+                    "name": item.get("name", "Unnamed"),
+                    "category": category.get("name", "Unknown"),
+                    "amount": amount,
+                    "owner": item.get("owner_slot", "unknown")
+                })
+                total += amount
         
         return {
-            "ok": True, 
+            "ok": True,
             "data": {
-                "income": income,
-                "expense": expense,
-                "balance": balance,
-                "savings_rate": (income - expense) / income if income > 0 else 0
+                "month": month,
+                "income_items": income_items,
+                "total": total
             }
         }
     except Exception as e:
-         return {"ok": False, "error": str(e), "code": "STATS_ERROR"}
+        return {"ok": False, "error": str(e), "code": "INCOME_BREAKDOWN_ERROR"}
 
+@register_tool("get_expense_breakdown")
+async def get_expense_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get detailed expense breakdown by category"""
+    try:
+        month = kwargs.get("month", datetime.now().strftime("%Y-%m"))
+        
+        budget = await budgets_collection.find_one({
+            "month": month,
+            "user_id": user_id
+        })
+        
+        if not budget:
+            return {"ok": True, "data": {"month": month, "expense_items": [], "total": 0}}
+        
+        budget_id = budget["_id"]
+        expense_items = []
+        total = 0
+        
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
+            
+            if category and category.get("type") == "expense":
+                amount = item.get("amount", 0)
+                expense_items.append({
+                    "name": item.get("name", "Unnamed"),
+                    "category": category.get("name", "Unknown"),
+                    "amount": amount,
+                    "owner": item.get("owner_slot", "unknown")
+                })
+                total += amount
+        
+        return {
+            "ok": True,
+            "data": {
+                "month": month,
+                "expense_items": expense_items,
+                "total": total
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "EXPENSE_BREAKDOWN_ERROR"}
+
+@register_tool("get_savings_breakdown")
+async def get_savings_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get detailed savings and fun breakdown"""
+    try:
+        month = kwargs.get("month", datetime.now().strftime("%Y-%m"))
+        
+        budget = await budgets_collection.find_one({
+            "month": month,
+            "user_id": user_id
+        })
+        
+        if not budget:
+            return {"ok": True, "data": {"month": month, "savings_items": [], "fun_items": [], "total": 0}}
+        
+        budget_id = budget["_id"]
+        savings_items = []
+        fun_items = []
+        total = 0
+        
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
+            
+            if category:
+                amount = item.get("amount", 0)
+                item_data = {
+                    "name": item.get("name", "Unnamed"),
+                    "category": category.get("name", "Unknown"),
+                    "amount": amount,
+                    "owner": item.get("owner_slot", "unknown")
+                }
+                
+                if category.get("type") == "savings" and item.get("owner_slot") == "shared":
+                    savings_items.append(item_data)
+                    total += amount
+                elif category.get("type") == "fun":
+                    fun_items.append(item_data)
+                    total += amount
+        
+        return {
+            "ok": True,
+            "data": {
+                "month": month,
+                "savings_items": savings_items,
+                "fun_items": fun_items,
+                "total": total
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "SAVINGS_BREAKDOWN_ERROR"}
+
+@register_tool("get_lifetime_savings")
+async def get_lifetime_savings(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get lifetime savings across all budgets"""
+    try:
+        pipeline = [
+            {"$match": {"user_id": user_id}},
+            {
+                "$lookup": {
+                    "from": "budget_line_items",
+                    "localField": "_id",
+                    "foreignField": "budget_id",
+                    "as": "items"
+                }
+            },
+            {"$unwind": "$items"},
+            {
+                "$lookup": {
+                    "from": "categories",
+                    "localField": "items.category_id",
+                    "foreignField": "_id",
+                    "as": "category"
+                }
+            },
+            {"$unwind": "$category"},
+            {
+                "$group": {
+                    "_id": None,
+                    "total_shared_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$and": [
+                                    {"$eq": ["$category.type", "savings"]},
+                                    {"$eq": ["$items.owner_slot", "shared"]}
+                                ]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    },
+                    "total_fun_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$category.type", "fun"]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+        
+        result = await budgets_collection.aggregate(pipeline).to_list(length=1)
+        
+        if result:
+            shared_savings = result[0].get("total_shared_savings", 0)
+            fun_savings = result[0].get("total_fun_savings", 0)
+            total_savings = shared_savings + fun_savings
+        else:
+            shared_savings = 0
+            fun_savings = 0
+            total_savings = 0
+        
+        return {
+            "ok": True,
+            "data": {
+                "lifetime_shared_savings": shared_savings,
+                "lifetime_fun_savings": fun_savings,
+                "lifetime_total_savings": total_savings
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "LIFETIME_SAVINGS_ERROR"}
