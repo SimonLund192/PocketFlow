@@ -25,12 +25,22 @@ export interface ChatResponse {
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
   // Get the token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  
+  // Clean up the token - remove any whitespace
+  if (token) {
+    token = token.trim();
+    // If token is empty after trimming, set it to null
+    if (token === '') {
+      token = null;
+    }
+  }
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
 
+  // Only add Authorization header if we have a valid token
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
