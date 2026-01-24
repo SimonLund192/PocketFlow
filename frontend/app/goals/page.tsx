@@ -1,9 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil, Trash2, Grip, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Goal {
   id: string;
@@ -12,31 +24,113 @@ interface Goal {
   target: number;
   priority: number;
   completed: boolean;
+  description?: string;
 }
 
 export default function Goals() {
-  const [goals, setGoals] = useState<Goal[]>([
-    {
-      id: "1",
-      name: "Vacation",
-      saved: 10000,
-      target: 10000,
-      priority: 1,
-      completed: true,
-    },
-    {
-      id: "2",
-      name: "Spain",
-      saved: 6000,
-      target: 10000,
-      priority: 2,
-      completed: false,
-    },
-  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newGoalName, setNewGoalName] = useState("");
+  const [newGoalAmount, setNewGoalAmount] = useState("");
+  const [newGoalDescription, setNewGoalDescription] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(goals[0]);
+  useEffect(() => {
+    const fetchGoals = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+          headers: {
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const mappedGoals: Goal[] = data.map((g: any, index: number) => ({
+            id: g.id,
+            name: g.name,
+            saved: g.current_amount,
+            target: g.target_amount,
+            priority: index + 1,
+            completed: g.achieved,
+            description: g.description
+          }));
+          setGoals(mappedGoals);
+          if (mappedGoals.length > 0 && !selectedGoal) {
+            setSelectedGoal(mappedGoals[0]);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching goals:", error);
+      }
+    };
+
+    fetchGoals();
+  }, []);
+
+  const handleAddGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newGoalName,
+          target_amount: parseFloat(newGoalAmount),
+          description: newGoalDescription
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create goal");
+      }
+
+      const createdGoal = await response.json();
+      
+      const newGoalObj: Goal = {
+        id: createdGoal.id,
+        name: createdGoal.name,
+        saved: createdGoal.current_amount,
+        target: createdGoal.target_amount,
+        priority: goals.length + 1,
+        completed: createdGoal.achieved,
+        description: createdGoal.description
+      };
+
+      setGoals([...goals, newGoalObj]);
+      setIsAddModalOpen(false);
+      setNewGoalName("");
+      setNewGoalAmount("");
+      setNewGoalDescription("");
+      
+      // Select the new goal if it's the first one
+      if (goals.length === 0) {
+        setSelectedGoal(newGoalObj);
+      }
+    } catch (error) {
+      console.error("Error creating goal:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Initial fetch of goals could go here
+    if (goals.length > 0 && !selectedGoal) {
+      setSelectedGoal(goals[0]);
+    }
+  }, [goals, selectedGoal]);
 
   const getProgress = (goal: Goal) => {
+    if (goal.target <= 0) return 0;
     return Math.min((goal.saved / goal.target) * 100, 100);
   };
 
@@ -72,151 +166,108 @@ export default function Goals() {
         <div className="grid grid-cols-[540px_1fr] gap-6">
           {/* Left Column - Goals List */}
           <div className="space-y-4">
-            {/* Vacation Goal - Completed */}
-            <Card
-              className={`p-8 cursor-pointer transition-all rounded-3xl ${
-                selectedGoal?.id === "1"
-                  ? "bg-indigo-600 text-white shadow-lg"
-                  : "bg-white hover:shadow-md border-2 border-gray-900"
-              }`}
-              onClick={() => setSelectedGoal(goals[0])}
-            >
-              <div className="flex items-center gap-6">
-                <button className={`p-1 rounded transition-colors ${
-                  selectedGoal?.id === "1" ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
-                }`}>
-                  <Grip className="w-6 h-6" />
-                </button>
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
-                    selectedGoal?.id === "1"
-                      ? "bg-indigo-500 text-white"
-                      : "bg-blue-100 text-indigo-600"
-                  }`}
-                >
-                  #1
-                </div>
-                <div
-                  className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
-                  style={{
-                    borderColor: selectedGoal?.id === "1" ? "rgba(255,255,255,0.4)" : "#22c55e",
-                    backgroundColor: selectedGoal?.id === "1" ? "rgba(255,255,255,0.2)" : "white",
-                    color: selectedGoal?.id === "1" ? "white" : "#22c55e",
-                  }}
-                >
-                  100%
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">Vacation</h3>
-                  <p className={`text-base ${selectedGoal?.id === "1" ? "text-white/90" : "text-gray-600"}`}>
-                    10000.00 kr / 10000.00 kr
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "1"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
+            {goals.map((goal) => (
+              <Card
+                key={goal.id}
+                className={`p-8 cursor-pointer transition-all rounded-3xl ${
+                  selectedGoal?.id === goal.id
+                    ? "bg-indigo-600 text-white shadow-lg"
+                    : "bg-white hover:shadow-md border-2 border-gray-900"
+                }`}
+                onClick={() => setSelectedGoal(goal)}
+              >
+                <div className="flex items-center gap-6">
+                  <button className={`p-1 rounded transition-colors ${
+                    selectedGoal?.id === goal.id ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
+                  }`}>
+                    <Grip className="w-6 h-6" />
+                  </button>
+                  <div
+                    className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
+                      selectedGoal?.id === goal.id
+                        ? "bg-indigo-500 text-white"
+                        : "bg-blue-100 text-indigo-600"
                     }`}
                   >
-                    <Pencil className="w-5 h-5" />
-                  </button>
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "1"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </Card>
+                    #{goal.priority}
+                  </div>
+                  
+                  {goal.completed ? (
+                      <div
+                      className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
+                      style={{
+                          borderColor: selectedGoal?.id === goal.id ? "rgba(255,255,255,0.4)" : "#22c55e",
+                          backgroundColor: selectedGoal?.id === goal.id ? "rgba(255,255,255,0.2)" : "white",
+                          color: selectedGoal?.id === goal.id ? "white" : "#22c55e",
+                      }}
+                      >
+                      100%
+                      </div>
+                  ) : (
+                      <div className="relative w-24 h-24">
+                        <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="42"
+                            fill="none"
+                            stroke={selectedGoal?.id === goal.id ? "rgba(255,255,255,0.2)" : "#e5e7eb"}
+                            strokeWidth="8"
+                          />
+                          <circle
+                            cx="50"
+                            cy="50"
+                            r="42"
+                            fill="none"
+                            stroke={selectedGoal?.id === goal.id ? "rgba(255,255,255,0.4)" : "#22c55e"}
+                            strokeWidth="8"
+                            strokeDasharray={`${getProgress(goal) * 2.64} ${100 * 2.64}`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className={`text-2xl font-bold ${selectedGoal?.id === goal.id ? "text-white" : "text-gray-900"}`}>
+                            {Math.round(getProgress(goal))}%
+                          </span>
+                        </div>
+                      </div>
+                  )}
 
-            {/* Spain Goal - In Progress */}
-            <Card
-              className={`p-8 cursor-pointer transition-all rounded-3xl ${
-                selectedGoal?.id === "2"
-                  ? "bg-indigo-600 text-white shadow-lg"
-                  : "bg-white hover:shadow-md border-2 border-gray-900"
-              }`}
-              onClick={() => setSelectedGoal(goals[1])}
-            >
-              <div className="flex items-center gap-6">
-                <button className={`p-1 rounded transition-colors ${
-                  selectedGoal?.id === "2" ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
-                }`}>
-                  <Grip className="w-6 h-6" />
-                </button>
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
-                    selectedGoal?.id === "2"
-                      ? "bg-indigo-500 text-white"
-                      : "bg-blue-100 text-indigo-600"
-                  }`}
-                >
-                  #2
-                </div>
-                <div className="relative w-24 h-24">
-                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke={selectedGoal?.id === "2" ? "rgba(255,255,255,0.2)" : "#e5e7eb"}
-                      strokeWidth="8"
-                    />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke={selectedGoal?.id === "2" ? "rgba(255,255,255,0.4)" : "#22c55e"}
-                      strokeWidth="8"
-                      strokeDasharray={`${60 * 2.64} ${40 * 2.64}`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-2xl font-bold ${selectedGoal?.id === "2" ? "text-white" : "text-gray-900"}`}>
-                      60%
-                    </span>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-bold mb-2">{goal.name}</h3>
+                    <p className={`text-base ${selectedGoal?.id === goal.id ? "text-white/90" : "text-gray-600"}`}>
+                      {goal.saved.toFixed(2)} kr / {goal.target.toFixed(2)} kr
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      className={`p-3 rounded-lg transition-colors ${
+                        selectedGoal?.id === goal.id
+                          ? "hover:bg-white/10"
+                          : "hover:bg-gray-100"
+                      }`}
+                    >
+                      <Pencil className="w-5 h-5" />
+                    </button>
+                    <button
+                      className={`p-3 rounded-lg transition-colors ${
+                        selectedGoal?.id === goal.id
+                          ? "hover:bg-white/10"
+                          : "hover:bg-gray-100"
+                      }`}
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">Spain</h3>
-                  <p className={`text-base ${selectedGoal?.id === "2" ? "text-white/90" : "text-gray-600"}`}>
-                    6000.00 kr / 10000.00 kr
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "2"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Pencil className="w-5 h-5" />
-                  </button>
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "2"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            ))}
 
             {/* Add New Goal */}
-            <button className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-indigo-600">
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-indigo-600"
+            >
               <Plus className="w-5 h-5" />
               <span className="font-medium">Add new goals</span>
             </button>
@@ -326,6 +377,62 @@ export default function Goals() {
           )}
         </div>
       </div>
+
+      {/* Add Goal Modal */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Goal</DialogTitle>
+            <DialogDescription>
+              Set a new savings target. Goals are prioritized top to bottom.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleAddGoal}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Goal Name</Label>
+                <Input
+                  id="name"
+                  value={newGoalName}
+                  onChange={(e) => setNewGoalName(e.target.value)}
+                  placeholder="e.g., New Car"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Target Amount (kr)</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  value={newGoalAmount}
+                  onChange={(e) => setNewGoalAmount(e.target.value)}
+                  placeholder="e.g., 50000"
+                  required
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description (Optional)</Label>
+                <Textarea
+                  id="description"
+                  value={newGoalDescription}
+                  onChange={(e) => setNewGoalDescription(e.target.value)}
+                  placeholder="What is this goal for?"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating..." : "Create Goal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
