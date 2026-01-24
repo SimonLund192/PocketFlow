@@ -13,6 +13,7 @@ Getting Started
 Prerequisites
 Docker Desktop installed
 Node.js 18+ and npm installed
+Set MISTRAL_API_KEY before running backend
 Running the Application
 Terminal 1 - Backend & Database:
 
