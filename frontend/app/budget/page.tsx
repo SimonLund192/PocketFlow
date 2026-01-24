@@ -16,6 +16,7 @@ import {
   BudgetLineItem,
   BudgetLineItemWithCategory
 } from "@/lib/budget-line-items-api";
+import { authApi } from "@/lib/auth-api";
 
 interface BudgetItem {
   id: string;
@@ -68,7 +69,7 @@ export default function BudgetPage() {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [activeTab, setActiveTab] = useState<TabType>("income");
   const [user1Name, setUser1Name] = useState("Simon Lund");
-  const [user2Name, setUser2Name] = useState("Aya Laurvigen");
+  const [user2Name, setUser2Name] = useState("User 2");
 
   // Backend data state
   const [categories, setCategories] = useState<Category[]>([]);
@@ -89,6 +90,24 @@ export default function BudgetPage() {
   const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const savingItems = useRef<Set<string>>(new Set());
   const createdItems = useRef<Set<string>>(new Set()); // Track items already created in backend
+
+  // Load user profile on mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const profile = await authApi.getProfile();
+        if (profile.partner_name) {
+          setUser2Name(profile.partner_name);
+        }
+        if (profile.full_name) {
+          setUser1Name(profile.full_name);
+        }
+      } catch (error) {
+        console.error("Failed to load profile", error);
+      }
+    };
+    loadProfile();
+  }, []);
 
   // Load categories on mount
   useEffect(() => {

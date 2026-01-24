@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from typing import Optional
+from pydantic import BaseModel
 from datetime import timedelta
 from app.database import get_database
+from app.dependencies import get_current_user
 from app.security import (
     verify_password,
     get_password_hash,
@@ -10,6 +13,16 @@ from app.security import (
     UserRegister,
     Token
 )
+
+class UserUpdate(BaseModel):
+    partner_name: Optional[str] = None
+    full_name: Optional[str] = None
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    full_name: Optional[str] = None
+    partner_name: Optional[str] = None
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -108,3 +121,48 @@ async def login(user_data: UserLogin):
 async def logout():
     """Logout user (client-side token removal)"""
     return {"message": "Successfully logged out"}
+
+@router.get("/me", response_model=UserProfile)
+async def read_users_me(email: str = Depends(get_current_user)):
+    """Get current user profile"""
+    db = await get_database()
+    user = await db["users"].find_one({"email": email})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "id": str(user["_id"]),
+        "email": user["email"],
+        "full_name": user.get("full_name"),
+        "partner_name": user.get("partner_name")
+    }
+
+@router.patch("/me", response_model=UserProfile)
+async def update_user_me(user_update: UserUpdate, email: str = Depends(get_current_user)):
+    """Update current user profile"""
+    db = await get_database()
+    
+    update_data = {k: v for k, v in user_update.model_dump().items() if v is not None}
+    
+    if not update_data:
+        # If no data to update, just return current user
+        user = await db["users"].find_one({"email": email})
+        return {
+            "id": str(user["_id"]),
+            "email": user["email"],
+            "full_name": user.get("full_name"),
+            "partner_name": user.get("partner_name")
+        }
+    
+    await db["users"].update_one(
+        {"email": email},
+        {"$set": update_data}
+    )
+    
+    updated_user = await db["users"].find_one({"email": email})
+    return {
+        "id": str(updated_user["_id"]),
+        "email": updated_user["email"],
+        "full_name": updated_user.get("full_name"),
+        "partner_name": updated_user.get("partner_name")
+    }

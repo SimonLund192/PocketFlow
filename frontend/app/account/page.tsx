@@ -8,6 +8,7 @@ import Header from "@/components/Header";
 import Tabs from "@/components/Tabs";
 import { categoriesApi, Category } from "@/lib/categories-api";
 import { adminApi } from "@/lib/admin-api";
+import { authApi } from "@/lib/auth-api";
 
 interface EditingCategory {
   id: string;
@@ -21,7 +22,8 @@ export default function Settings() {
   // Initialize activeTab with default value (no localStorage during SSR)
   const [activeTab, setActiveTab] = useState("Account");
   const [isTabInitialized, setIsTabInitialized] = useState(false);
-  const [partnerName, setPartnerName] = useState("Aya Laurvigen");
+  const [partnerName, setPartnerName] = useState("");
+  const [loadingProfile, setLoadingProfile] = useState(false);
   
   // Load saved tab from localStorage after component mounts (client-side only)
   useEffect(() => {
@@ -55,8 +57,8 @@ export default function Settings() {
   };
   
   // Profile tab state
-  const [fullName, setFullName] = useState("Simon Lund");
-  const [email, setEmail] = useState("Lund16@gmail.com");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [address, setAddress] = useState("123, Central Square, Brooklyn");
@@ -87,6 +89,40 @@ export default function Settings() {
       loadCategories();
     }
   }, [activeTab]);
+
+  // Fetch user profile on mount
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      setLoadingProfile(true);
+      const profile = await authApi.getProfile();
+      if (profile.partner_name) {
+        setPartnerName(profile.partner_name);
+      }
+      if (profile.full_name) {
+        setFullName(profile.full_name);
+      }
+      if (profile.email) {
+        setEmail(profile.email);
+      }
+    } catch (error) {
+      console.error("Failed to load profile", error);
+    } finally {
+      setLoadingProfile(false);
+    }
+  };
+
+  const handleSavePartnerName = async () => {
+    try {
+      await authApi.updateProfile({ partner_name: partnerName });
+      // You might want to add a toast notification here
+    } catch (error) {
+      console.error("Failed to save partner name", error);
+    }
+  };
 
   const loadCategories = async () => {
     try {
@@ -359,9 +395,13 @@ export default function Settings() {
                 type="text"
                 value={partnerName}
                 onChange={(e) => setPartnerName(e.target.value)}
+                placeholder="Enter partner name"
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium">
+              <Button 
+                onClick={handleSavePartnerName}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium"
+              >
                 Save
               </Button>
             </div>
