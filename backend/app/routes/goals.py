@@ -13,6 +13,7 @@ class GoalBase(BaseModel):
     name: str
     target_amount: float
     description: Optional[str] = None
+    type: Optional[str] = "shared" # "shared" or "fun"
 
 class GoalCreate(GoalBase):
     pass
@@ -24,6 +25,7 @@ class GoalResponse(GoalBase):
     achieved: bool
     priority: int
     created_at: datetime
+    type: str # Return actual type
     
     class Config:
         populate_by_name = True
@@ -35,9 +37,18 @@ class GoalReorder(BaseModel):
 async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_id)):
     """Create a new goal for the logged-in user."""
     
-    # Calculate new priority (highest + 1)
+    goal_type = goal.type or "shared"
+
+    # Calculate new priority (highest + 1) within the specific type
+    match_query = {
+        "user_id": user_id,
+        "$or": [{"type": goal_type}]
+    }
+    if goal_type == "shared":
+        match_query["$or"].append({"type": {"$exists": False}})
+
     highest_priority_goal = await goals_collection.find_one(
-        {"user_id": user_id},
+        match_query,
         sort=[("priority", -1)]
     )
     new_priority = (highest_priority_goal["priority"] + 1) if highest_priority_goal and "priority" in highest_priority_goal else 1
@@ -49,6 +60,7 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         "target_amount": goal.target_amount,
         "current_amount": 0.0,
         "description": goal.description,
+        "type": goal_type,
         "achieved": False,
         "priority": new_priority,
         "created_at": datetime.now(timezone.utc),
@@ -68,6 +80,7 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         target_amount=created_goal["target_amount"],
         current_amount=created_goal["current_amount"],
         description=created_goal.get("description"),
+        type=created_goal.get("type", "shared"),
         achieved=created_goal["achieved"],
         priority=created_goal.get("priority", 0),
         created_at=created_goal["created_at"]
@@ -86,6 +99,7 @@ async def get_goals(user_id: str = Depends(get_current_user_id)):
             target_amount=goal["target_amount"],
             current_amount=goal["current_amount"],
             description=goal.get("description"),
+            type=goal.get("type", "shared"), # Default to shared
             achieved=goal["achieved"],
             priority=goal.get("priority", 0),
             created_at=goal["created_at"]
@@ -119,6 +133,7 @@ async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_c
             "name": goal.name,
             "target_amount": goal.target_amount,
             "description": goal.description,
+            "type": goal.type or "shared",
             "updated_at": datetime.now(timezone.utc)
         }},
         return_document=True
@@ -134,6 +149,7 @@ async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_c
         target_amount=updated_goal["target_amount"],
         current_amount=updated_goal["current_amount"],
         description=updated_goal.get("description"),
+        type=updated_goal.get("type", "shared"),
         achieved=updated_goal["achieved"],
         priority=updated_goal.get("priority", 0),
         created_at=updated_goal["created_at"]

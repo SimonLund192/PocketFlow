@@ -34,6 +34,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import Tabs from "@/components/Tabs";
 
 interface Goal {
   id: string;
@@ -42,6 +43,7 @@ interface Goal {
   target: number;
   priority: number;
   completed: boolean;
+  type: "shared" | "fun"; // Add type
   description?: string;
 }
 
@@ -212,6 +214,7 @@ function SortableGoalItem({
 
 export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [activeTab, setActiveTab] = useState("Shared Goals"); // Add activeTab
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newGoalName, setNewGoalName] = useState("");
@@ -221,23 +224,28 @@ export default function Goals() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
   const [totalSharedSavings, setTotalSharedSavings] = useState(0);
+  const [totalFunSavings, setTotalFunSavings] = useState(0); // Add totalFunSavings
 
-  const recalculateGoals = (currentGoals: Goal[], totalSavings: number): Goal[] => {
-    let remaining = totalSavings;
-    // Sort by priority ensures hierarchy is respected
-    const sortedGoals = [...currentGoals].sort((a, b) => a.priority - b.priority);
-    
-    return sortedGoals.map(goal => {
-      const amount = Math.min(remaining, goal.target);
-      remaining = Math.max(0, remaining - amount);
-      const isCompleted = amount >= goal.target; 
-      
-      return {
-        ...goal,
-        saved: amount,
-        completed: isCompleted
+  const recalculateAllGoals = (currentGoals: Goal[], sharedSavings: number, funSavings: number): Goal[] => {
+      // Split into two lists
+      const sharedGoals = currentGoals.filter(g => g.type === "shared").sort((a, b) => a.priority - b.priority);
+      const funGoals = currentGoals.filter(g => g.type === "fun").sort((a, b) => a.priority - b.priority);
+
+      const processList = (list: Goal[], availableSavings: number) => {
+          let remaining = availableSavings;
+          return list.map(goal => {
+              const amount = Math.min(remaining, goal.target);
+              remaining = Math.max(0, remaining - amount);
+              const isCompleted = amount >= goal.target;
+              return {
+                  ...goal,
+                  saved: amount,
+                  completed: isCompleted
+              };
+          });
       };
-    });
+
+      return [...processList(sharedGoals, sharedSavings), ...processList(funGoals, funSavings)];
   };
 
   useEffect(() => {
@@ -262,9 +270,11 @@ export default function Goals() {
         const goalsData = await goalsResponse.json();
         
         // Calculate total shared savings from trends
-        const latestTrend = balanceTrends.length > 0 ? balanceTrends[balanceTrends.length - 1] : { shared: 0 };
+        const latestTrend = balanceTrends.length > 0 ? balanceTrends[balanceTrends.length - 1] : { shared: 0, personal: 0 };
         const totalSavings = latestTrend.shared;
+        const totalFun = latestTrend.personal; // Get fun savings
         setTotalSharedSavings(totalSavings);
+        setTotalFunSavings(totalFun);
 
         // Map API response to Goal interface
         const initialGoals: Goal[] = goalsData.map((goal: any) => ({
@@ -274,14 +284,17 @@ export default function Goals() {
             target: goal.target_amount,
             priority: goal.priority,
             completed: false, // Will be calculated
+            type: goal.type === "fun" ? "fun" : "shared", // Determine type
             description: goal.description
         }));
 
-        const processedGoals = recalculateGoals(initialGoals, totalSavings);
+        const processedGoals = recalculateAllGoals(initialGoals, totalSavings, totalFun);
         setGoals(processedGoals);
         
-        if (processedGoals.length > 0 && !selectedGoal) {
-          setSelectedGoal(processedGoals[0]);
+        // Filter selection
+        const displayedGoals = processedGoals.filter(g => g.type === (activeTab === "Shared Goals" ? "shared" : "fun"));
+        if (displayedGoals.length > 0 && !selectedGoal) {
+          setSelectedGoal(displayedGoals[0]);
         }
       } catch (error) {
         console.error("Error fetching goals:", error);
@@ -306,7 +319,8 @@ export default function Goals() {
         body: JSON.stringify({
           name: newGoalName,
           target_amount: parseFloat(newGoalAmount),
-          description: newGoalDescription
+          description: newGoalDescription,
+          type: activeTab === "Fun Goals" ? "fun" : "shared" // Set type based on tab
         }),
       });
 
@@ -323,10 +337,11 @@ export default function Goals() {
         target: createdGoal.target_amount,
         priority: goals.length + 1,
         completed: false,
+        type: activeTab === "Fun Goals" ? "fun" : "shared", // Set type based on tab
         description: createdGoal.description
       };
 
-      const updatedList = recalculateGoals([...goals, newGoalObj], totalSharedSavings);
+      const updatedList = recalculateAllGoals([...goals, newGoalObj], totalSharedSavings, totalFunSavings);
       setGoals(updatedList);
       setIsAddModalOpen(false);
       setNewGoalName("");
@@ -377,11 +392,12 @@ export default function Goals() {
         target: updatedGoal.target_amount,
         priority: editingGoal.priority, // Keep existing priority
         completed: updatedGoal.achieved,
+        type: editingGoal.type, // Keep existing type
         description: updatedGoal.description
       };
 
       const updatedList = goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g);
-      const recalculatedList = recalculateGoals(updatedList, totalSharedSavings);
+      const recalculatedList = recalculateAllGoals(updatedList, totalSharedSavings, totalFunSavings);
       setGoals(recalculatedList);
       setIsEditModalOpen(false);
       setEditingGoal(null);
@@ -414,7 +430,7 @@ export default function Goals() {
       }
 
       const filteredGoals = goals.filter(g => g.id !== goalId);
-      const recalculatedLabels = recalculateGoals(filteredGoals, totalSharedSavings);
+      const recalculatedLabels = recalculateAllGoals(filteredGoals, totalSharedSavings, totalFunSavings);
       setGoals(recalculatedLabels);
       
       if (selectedGoal?.id === goalId) {
@@ -463,24 +479,38 @@ export default function Goals() {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = goals.findIndex((g) => g.id === active.id);
-      const newIndex = goals.findIndex((g) => g.id === over.id);
+      const currentType = activeTab === "Shared Goals" ? "shared" : "fun";
+      const currentMinPriority = 1; // Always start at 1 for each type
+
+      // Filter to just the list being reordered
+      const currentList = goals
+        .filter(g => g.type === currentType)
+        .sort((a, b) => a.priority - b.priority);
+
+      const oldIndex = currentList.findIndex((g) => g.id === active.id);
+      const newIndex = currentList.findIndex((g) => g.id === over.id);
 
       if (oldIndex !== -1 && newIndex !== -1) {
-        // Reorder array locally
-        const reorderedGoals = arrayMove(goals, oldIndex, newIndex);
+        // Reorder sub-list locally
+        const reorderedSubList = arrayMove(currentList, oldIndex, newIndex);
         
-        // Update priorities based on new index
-        const updatedGoals = reorderedGoals.map((g, i) => ({
+        // Update priorities for sub-list
+        const updatedSubList = reorderedSubList.map((g, i) => ({
           ...g,
-          priority: i + 1
+          priority: currentMinPriority + i
         }));
         
-        // Recalculate savings distribution based on new hierarchy
-        const finalGoals = recalculateGoals(updatedGoals, totalSharedSavings);
+        // Merge back into main list
+        // 1. Get other goals (wrong type)
+        const otherGoals = goals.filter(g => g.type !== currentType);
+        // 2. Combine
+        const newAllGoals = [...otherGoals, ...updatedSubList];
+
+        // Recalculate savings distribution
+        const finalGoals = recalculateAllGoals(newAllGoals, totalSharedSavings, totalFunSavings);
         setGoals(finalGoals);
 
-        // API Call to persist order
+        // API Call to persist order (send only the updated sub-list IDs)
         try {
           const token = localStorage.getItem("token");
           await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/reorder`, {
@@ -490,7 +520,7 @@ export default function Goals() {
               "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
-              goal_ids: updatedGoals.map(g => g.id)
+              goal_ids: updatedSubList.map(g => g.id)
             })
           });
         } catch (error) {
@@ -499,6 +529,10 @@ export default function Goals() {
       }
     }
   };
+
+  const displayedGoals = goals
+    .filter(g => g.type === (activeTab === "Shared Goals" ? "shared" : "fun"))
+    .sort((a, b) => a.priority - b.priority);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -510,6 +544,13 @@ export default function Goals() {
 
       {/* Main Content */}
       <div className="p-8">
+        <Tabs 
+          tabs={["Shared Goals", "Fun Goals"]} 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab}
+          className="mb-8"
+        />
+
         {/* Info Banner */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
@@ -534,10 +575,10 @@ export default function Goals() {
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={goals.map(goal => goal.id)}
+                items={displayedGoals.map(goal => goal.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {goals.map((goal) => (
+                {displayedGoals.map((goal) => (
                   <SortableGoalItem
                     key={goal.id}
                     goal={goal}
@@ -669,35 +710,35 @@ export default function Goals() {
       {/* Add Goal Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add New Goal</DialogTitle>
-            <DialogDescription>
-              Create a new savings goal. Goals work hierarchically.
-            </DialogDescription>
-          </DialogHeader>
           <form onSubmit={handleAddGoal}>
+            <DialogHeader>
+              <DialogTitle>Add {activeTab === "Shared Goals" ? "Shared" : "Fun"} Goal</DialogTitle>
+              <DialogDescription>
+                Create a new goal for your {activeTab === "Shared Goals" ? "shared" : "fun"} savings journey.
+              </DialogDescription>
+            </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="name">Goal Name</Label>
+                <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
                   value={newGoalName}
                   onChange={(e) => setNewGoalName(e.target.value)}
-                  placeholder="e.g., New Car"
+                  placeholder="e.g. New Car"
                   required
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="amount">Target Amount (kr)</Label>
+                <Label htmlFor="target">Target Amount (kr)</Label>
                 <Input
-                  id="amount"
+                  id="target"
                   type="number"
-                  value={newGoalAmount}
-                  onChange={(e) => setNewGoalAmount(e.target.value)}
-                  placeholder="e.g., 50000"
-                  required
                   min="0"
                   step="0.01"
+                  value={newGoalAmount}
+                  onChange={(e) => setNewGoalAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
                 />
               </div>
               <div className="grid gap-2">
@@ -725,53 +766,63 @@ export default function Goals() {
       {/* Edit Goal Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Goal</DialogTitle>
-            <DialogDescription>
-              Update your savings goal details.
-            </DialogDescription>
-          </DialogHeader>
           <form onSubmit={handleEditGoal}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-name">Goal Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editingGoal?.name}
-                  onChange={(e) => setEditingGoal({ ...editingGoal!, name: e.target.value })}
-                  placeholder="e.g., New Car"
-                  required
-                />
+            <DialogHeader>
+              <DialogTitle>Edit Goal</DialogTitle>
+              <DialogDescription>
+                Make changes to your goal here.
+              </DialogDescription>
+            </DialogHeader>
+            {editingGoal && (
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-name">Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editingGoal.name}
+                    onChange={(e) => setEditingGoal({ ...editingGoal, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-target">Target Amount (kr)</Label>
+                  <Input
+                    id="edit-target"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingGoal.target}
+                    onChange={(e) =>
+                      setEditingGoal({
+                        ...editingGoal,
+                        target: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-description">Description (Optional)</Label>
+                  <Textarea
+                    id="edit-description"
+                    value={editingGoal.description || ""}
+                    onChange={(e) =>
+                      setEditingGoal({ ...editingGoal, description: e.target.value })
+                    }
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-amount">Target Amount (kr)</Label>
-                <Input
-                  id="edit-amount"
-                  type="number"
-                  value={editingGoal?.target}
-                  onChange={(e) => setEditingGoal({ ...editingGoal!, target: parseFloat(e.target.value) })}
-                  placeholder="e.g., 50000"
-                  required
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-description">Description (Optional)</Label>
-                <Textarea
-                  id="edit-description"
-                  value={editingGoal?.description}
-                  onChange={(e) => setEditingGoal({ ...editingGoal!, description: e.target.value })}
-                  placeholder="What is this goal for?"
-                />
-              </div>
-            </div>
+            )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditModalOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Updating..." : "Update Goal"}
+                {loading ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>
