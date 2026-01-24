@@ -1,9 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil, Trash2, Grip, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { getBalanceTrends } from "@/lib/dashboard-api";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import Tabs from "@/components/Tabs";
 
 interface Goal {
   id: string;
@@ -12,37 +43,496 @@ interface Goal {
   target: number;
   priority: number;
   completed: boolean;
+  type: "shared" | "fun"; // Add type
+  description?: string;
+}
+
+function SortableGoalItem({
+  goal,
+  selectedGoal,
+  setSelectedGoal,
+  openEditModal,
+  deleteGoalHandler,
+  getProgress,
+}: {
+  goal: Goal;
+  selectedGoal: Goal | null;
+  setSelectedGoal: (goal: Goal) => void;
+  openEditModal: (goal: Goal, e: React.MouseEvent) => void;
+  deleteGoalHandler: (goalId: string, e: React.MouseEvent) => void;
+  getProgress: (goal: Goal) => number;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: goal.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
+    position: 'relative' as 'relative',
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card
+        className={`p-8 cursor-pointer transition-all rounded-3xl ${
+          selectedGoal?.id === goal.id
+            ? "bg-indigo-600 text-white shadow-lg"
+            : "bg-white hover:shadow-md border-2 border-gray-900"
+        }`}
+        onClick={() => setSelectedGoal(goal)}
+      >
+        <div className="flex items-center gap-6">
+          <button
+            className={`p-1 rounded transition-colors cursor-grab active:cursor-grabbing ${
+              selectedGoal?.id === goal.id
+                ? "text-white/80 hover:text-white"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()} 
+          >
+            <Grip className="w-6 h-6" />
+          </button>
+          <div
+            className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
+              selectedGoal?.id === goal.id
+                ? "bg-indigo-500 text-white"
+                : "bg-blue-100 text-indigo-600"
+            }`}
+          >
+            #{goal.priority}
+          </div>
+
+          {goal.completed ? (
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
+              style={{
+                borderColor:
+                  selectedGoal?.id === goal.id
+                    ? "rgba(255,255,255,0.4)"
+                    : "#22c55e",
+                backgroundColor:
+                  selectedGoal?.id === goal.id
+                    ? "rgba(255,255,255,0.2)"
+                    : "white",
+                color: selectedGoal?.id === goal.id ? "white" : "#22c55e",
+              }}
+            >
+              100%
+            </div>
+          ) : (
+            <div className="relative w-24 h-24">
+              <svg
+                className="w-24 h-24 transform -rotate-90"
+                viewBox="0 0 100 100"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke={
+                    selectedGoal?.id === goal.id
+                      ? "rgba(255,255,255,0.2)"
+                      : "#e5e7eb"
+                  }
+                  strokeWidth="8"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke={
+                    selectedGoal?.id === goal.id
+                      ? "rgba(255,255,255,0.4)"
+                      : "#22c55e"
+                  }
+                  strokeWidth="8"
+                  strokeDasharray={`${getProgress(goal) * 2.64} ${100 * 2.64}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span
+                  className={`text-2xl font-bold ${
+                    selectedGoal?.id === goal.id ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  {Math.round(getProgress(goal))}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1">
+            <h3 className="text-2xl font-bold mb-2">{goal.name}</h3>
+            <p
+              className={`text-base ${
+                selectedGoal?.id === goal.id ? "text-white/90" : "text-gray-600"
+              }`}
+            >
+              {goal.saved.toFixed(2)} kr / {goal.target.toFixed(2)} kr
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              className={`p-3 rounded-lg transition-colors ${
+                selectedGoal?.id === goal.id
+                  ? "hover:bg-white/10"
+                  : "hover:bg-gray-100"
+              }`}
+              onClick={(e) => openEditModal(goal, e)}
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+            <button
+              className={`p-3 rounded-lg transition-colors ${
+                selectedGoal?.id === goal.id
+                  ? "hover:bg-white/10"
+                  : "hover:bg-gray-100"
+              }`}
+              onClick={(e) => deleteGoalHandler(goal.id, e)}
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 export default function Goals() {
-  const [goals, setGoals] = useState<Goal[]>([
-    {
-      id: "1",
-      name: "Vacation",
-      saved: 10000,
-      target: 10000,
-      priority: 1,
-      completed: true,
-    },
-    {
-      id: "2",
-      name: "Spain",
-      saved: 6000,
-      target: 10000,
-      priority: 2,
-      completed: false,
-    },
-  ]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [activeTab, setActiveTab] = useState("Shared Goals"); // Add activeTab
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newGoalName, setNewGoalName] = useState("");
+  const [newGoalAmount, setNewGoalAmount] = useState("");
+  const [newGoalDescription, setNewGoalDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [totalSharedSavings, setTotalSharedSavings] = useState(0);
+  const [totalFunSavings, setTotalFunSavings] = useState(0); // Add totalFunSavings
 
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(goals[0]);
+  const recalculateAllGoals = (currentGoals: Goal[], sharedSavings: number, funSavings: number): Goal[] => {
+      // Split into two lists
+      const sharedGoals = currentGoals.filter(g => g.type === "shared").sort((a, b) => a.priority - b.priority);
+      const funGoals = currentGoals.filter(g => g.type === "fun").sort((a, b) => a.priority - b.priority);
+
+      const processList = (list: Goal[], availableSavings: number) => {
+          let remaining = availableSavings;
+          return list.map(goal => {
+              const amount = Math.min(remaining, goal.target);
+              remaining = Math.max(0, remaining - amount);
+              const isCompleted = amount >= goal.target;
+              return {
+                  ...goal,
+                  saved: amount,
+                  completed: isCompleted
+              };
+          });
+      };
+
+      return [...processList(sharedGoals, sharedSavings), ...processList(funGoals, funSavings)];
+  };
+
+  useEffect(() => {
+    const fetchGoals = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        
+        // Fetch goals and balance trends in parallel
+        const [goalsResponse, balanceTrends] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          }),
+          getBalanceTrends()
+        ]);
+
+        if (!goalsResponse.ok) {
+          throw new Error("Failed to fetch goals");
+        }
+
+        const goalsData = await goalsResponse.json();
+        
+        // Calculate total shared savings from trends
+        const latestTrend = balanceTrends.length > 0 ? balanceTrends[balanceTrends.length - 1] : { shared: 0, personal: 0 };
+        const totalSavings = latestTrend.shared;
+        const totalFun = latestTrend.personal; // Get fun savings
+        setTotalSharedSavings(totalSavings);
+        setTotalFunSavings(totalFun);
+
+        // Map API response to Goal interface
+        const initialGoals: Goal[] = goalsData.map((goal: any) => ({
+            id: goal.id,
+            name: goal.name,
+            saved: 0, // Will be calculated
+            target: goal.target_amount,
+            priority: goal.priority,
+            completed: false, // Will be calculated
+            type: goal.type === "fun" ? "fun" : "shared", // Determine type
+            description: goal.description
+        }));
+
+        const processedGoals = recalculateAllGoals(initialGoals, totalSavings, totalFun);
+        setGoals(processedGoals);
+        
+        // Filter selection
+        const displayedGoals = processedGoals.filter(g => g.type === (activeTab === "Shared Goals" ? "shared" : "fun"));
+        if (displayedGoals.length > 0 && !selectedGoal) {
+          setSelectedGoal(displayedGoals[0]);
+        }
+      } catch (error) {
+        console.error("Error fetching goals:", error);
+      }
+    };
+
+    fetchGoals();
+  }, []);
+
+  const handleAddGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newGoalName,
+          target_amount: parseFloat(newGoalAmount),
+          description: newGoalDescription,
+          type: activeTab === "Fun Goals" ? "fun" : "shared" // Set type based on tab
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create goal");
+      }
+
+      const createdGoal = await response.json();
+      
+      const newGoalObj: Goal = {
+        id: createdGoal.id,
+        name: createdGoal.name,
+        saved: 0, 
+        target: createdGoal.target_amount,
+        priority: goals.length + 1,
+        completed: false,
+        type: activeTab === "Fun Goals" ? "fun" : "shared", // Set type based on tab
+        description: createdGoal.description
+      };
+
+      const updatedList = recalculateAllGoals([...goals, newGoalObj], totalSharedSavings, totalFunSavings);
+      setGoals(updatedList);
+      setIsAddModalOpen(false);
+      setNewGoalName("");
+      setNewGoalAmount("");
+      setNewGoalDescription("");
+      
+      // Select the new goal if it's the first one
+      if (goals.length === 0) {
+        setSelectedGoal(updatedList[0]);
+      }
+    } catch (error) {
+      console.error("Error creating goal:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGoal) return;
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${editingGoal.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editingGoal.name,
+          target_amount: editingGoal.target,
+          description: editingGoal.description
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update goal");
+      }
+
+      const updatedGoal = await response.json();
+      
+      const updatedGoalObj: Goal = {
+        id: updatedGoal.id,
+        name: updatedGoal.name,
+        saved: updatedGoal.current_amount,
+        target: updatedGoal.target_amount,
+        priority: editingGoal.priority, // Keep existing priority
+        completed: updatedGoal.achieved,
+        type: editingGoal.type, // Keep existing type
+        description: updatedGoal.description
+      };
+
+      const updatedList = goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g);
+      const recalculatedList = recalculateAllGoals(updatedList, totalSharedSavings, totalFunSavings);
+      setGoals(recalculatedList);
+      setIsEditModalOpen(false);
+      setEditingGoal(null);
+      if (selectedGoal?.id === updatedGoal.id) {
+        // Find the updated goal in the recalculated list
+        const latestSelected = recalculatedList.find(g => g.id === updatedGoal.id);
+        if (latestSelected) setSelectedGoal(latestSelected);
+      }
+    } catch (error) {
+      console.error("Error updating goal:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!confirm("Are you sure you want to delete this goal?")) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${goalId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete goal");
+      }
+
+      const filteredGoals = goals.filter(g => g.id !== goalId);
+      const recalculatedLabels = recalculateAllGoals(filteredGoals, totalSharedSavings, totalFunSavings);
+      setGoals(recalculatedLabels);
+      
+      if (selectedGoal?.id === goalId) {
+        setSelectedGoal(recalculatedLabels.length > 0 ? recalculatedLabels[0] : null);
+      }
+    } catch (error) {
+      console.error("Error deleting goal:", error);
+    }
+  };
+
+  const openEditModal = (goal: Goal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingGoal(goal);
+    setIsEditModalOpen(true);
+  };
+
+  const deleteGoalHandler = (goalId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleDeleteGoal(goalId);
+  };
+
+  useEffect(() => {
+    // Initial fetch of goals could go here
+    if (goals.length > 0 && !selectedGoal) {
+      setSelectedGoal(goals[0]);
+    }
+  }, [goals, selectedGoal]);
 
   const getProgress = (goal: Goal) => {
+    if (goal.target <= 0) return 0;
     return Math.min((goal.saved / goal.target) * 100, 100);
   };
 
   const getRemaining = (goal: Goal) => {
     return Math.max(goal.target - goal.saved, 0);
   };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const currentType = activeTab === "Shared Goals" ? "shared" : "fun";
+      const currentMinPriority = 1; // Always start at 1 for each type
+
+      // Filter to just the list being reordered
+      const currentList = goals
+        .filter(g => g.type === currentType)
+        .sort((a, b) => a.priority - b.priority);
+
+      const oldIndex = currentList.findIndex((g) => g.id === active.id);
+      const newIndex = currentList.findIndex((g) => g.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reorder sub-list locally
+        const reorderedSubList = arrayMove(currentList, oldIndex, newIndex);
+        
+        // Update priorities for sub-list
+        const updatedSubList = reorderedSubList.map((g, i) => ({
+          ...g,
+          priority: currentMinPriority + i
+        }));
+        
+        // Merge back into main list
+        // 1. Get other goals (wrong type)
+        const otherGoals = goals.filter(g => g.type !== currentType);
+        // 2. Combine
+        const newAllGoals = [...otherGoals, ...updatedSubList];
+
+        // Recalculate savings distribution
+        const finalGoals = recalculateAllGoals(newAllGoals, totalSharedSavings, totalFunSavings);
+        setGoals(finalGoals);
+
+        // API Call to persist order (send only the updated sub-list IDs)
+        try {
+          const token = localStorage.getItem("token");
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/reorder`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              goal_ids: updatedSubList.map(g => g.id)
+            })
+          });
+        } catch (error) {
+          console.error("Failed to reorder goals:", error);
+        }
+      }
+    }
+  };
+
+  const displayedGoals = goals
+    .filter(g => g.type === (activeTab === "Shared Goals" ? "shared" : "fun"))
+    .sort((a, b) => a.priority - b.priority);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -54,6 +544,13 @@ export default function Goals() {
 
       {/* Main Content */}
       <div className="p-8">
+        <Tabs 
+          tabs={["Shared Goals", "Fun Goals"]} 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab}
+          className="mb-8"
+        />
+
         {/* Info Banner */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
@@ -72,151 +569,34 @@ export default function Goals() {
         <div className="grid grid-cols-[540px_1fr] gap-6">
           {/* Left Column - Goals List */}
           <div className="space-y-4">
-            {/* Vacation Goal - Completed */}
-            <Card
-              className={`p-8 cursor-pointer transition-all rounded-3xl ${
-                selectedGoal?.id === "1"
-                  ? "bg-indigo-600 text-white shadow-lg"
-                  : "bg-white hover:shadow-md border-2 border-gray-900"
-              }`}
-              onClick={() => setSelectedGoal(goals[0])}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
             >
-              <div className="flex items-center gap-6">
-                <button className={`p-1 rounded transition-colors ${
-                  selectedGoal?.id === "1" ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
-                }`}>
-                  <Grip className="w-6 h-6" />
-                </button>
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
-                    selectedGoal?.id === "1"
-                      ? "bg-indigo-500 text-white"
-                      : "bg-blue-100 text-indigo-600"
-                  }`}
-                >
-                  #1
-                </div>
-                <div
-                  className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
-                  style={{
-                    borderColor: selectedGoal?.id === "1" ? "rgba(255,255,255,0.4)" : "#22c55e",
-                    backgroundColor: selectedGoal?.id === "1" ? "rgba(255,255,255,0.2)" : "white",
-                    color: selectedGoal?.id === "1" ? "white" : "#22c55e",
-                  }}
-                >
-                  100%
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">Vacation</h3>
-                  <p className={`text-base ${selectedGoal?.id === "1" ? "text-white/90" : "text-gray-600"}`}>
-                    10000.00 kr / 10000.00 kr
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "1"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Pencil className="w-5 h-5" />
-                  </button>
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "1"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </Card>
-
-            {/* Spain Goal - In Progress */}
-            <Card
-              className={`p-8 cursor-pointer transition-all rounded-3xl ${
-                selectedGoal?.id === "2"
-                  ? "bg-indigo-600 text-white shadow-lg"
-                  : "bg-white hover:shadow-md border-2 border-gray-900"
-              }`}
-              onClick={() => setSelectedGoal(goals[1])}
-            >
-              <div className="flex items-center gap-6">
-                <button className={`p-1 rounded transition-colors ${
-                  selectedGoal?.id === "2" ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
-                }`}>
-                  <Grip className="w-6 h-6" />
-                </button>
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
-                    selectedGoal?.id === "2"
-                      ? "bg-indigo-500 text-white"
-                      : "bg-blue-100 text-indigo-600"
-                  }`}
-                >
-                  #2
-                </div>
-                <div className="relative w-24 h-24">
-                  <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke={selectedGoal?.id === "2" ? "rgba(255,255,255,0.2)" : "#e5e7eb"}
-                      strokeWidth="8"
-                    />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke={selectedGoal?.id === "2" ? "rgba(255,255,255,0.4)" : "#22c55e"}
-                      strokeWidth="8"
-                      strokeDasharray={`${60 * 2.64} ${40 * 2.64}`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className={`text-2xl font-bold ${selectedGoal?.id === "2" ? "text-white" : "text-gray-900"}`}>
-                      60%
-                    </span>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">Spain</h3>
-                  <p className={`text-base ${selectedGoal?.id === "2" ? "text-white/90" : "text-gray-600"}`}>
-                    6000.00 kr / 10000.00 kr
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "2"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Pencil className="w-5 h-5" />
-                  </button>
-                  <button
-                    className={`p-3 rounded-lg transition-colors ${
-                      selectedGoal?.id === "2"
-                        ? "hover:bg-white/10"
-                        : "hover:bg-gray-100"
-                    }`}
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </Card>
+              <SortableContext
+                items={displayedGoals.map(goal => goal.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {displayedGoals.map((goal) => (
+                  <SortableGoalItem
+                    key={goal.id}
+                    goal={goal}
+                    selectedGoal={selectedGoal}
+                    setSelectedGoal={setSelectedGoal}
+                    openEditModal={openEditModal}
+                    deleteGoalHandler={deleteGoalHandler}
+                    getProgress={getProgress}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
 
             {/* Add New Goal */}
-            <button className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-indigo-600">
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="w-full py-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-indigo-600"
+            >
               <Plus className="w-5 h-5" />
               <span className="font-medium">Add new goals</span>
             </button>
@@ -326,6 +706,128 @@ export default function Goals() {
           )}
         </div>
       </div>
+
+      {/* Add Goal Modal */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleAddGoal}>
+            <DialogHeader>
+              <DialogTitle>Add {activeTab === "Shared Goals" ? "Shared" : "Fun"} Goal</DialogTitle>
+              <DialogDescription>
+                Create a new goal for your {activeTab === "Shared Goals" ? "shared" : "fun"} savings journey.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  value={newGoalName}
+                  onChange={(e) => setNewGoalName(e.target.value)}
+                  placeholder="e.g. New Car"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="target">Target Amount (kr)</Label>
+                <Input
+                  id="target"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={newGoalAmount}
+                  onChange={(e) => setNewGoalAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description (Optional)</Label>
+                <Textarea
+                  id="description"
+                  value={newGoalDescription}
+                  onChange={(e) => setNewGoalDescription(e.target.value)}
+                  placeholder="What is this goal for?"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Creating..." : "Create Goal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Goal Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleEditGoal}>
+            <DialogHeader>
+              <DialogTitle>Edit Goal</DialogTitle>
+              <DialogDescription>
+                Make changes to your goal here.
+              </DialogDescription>
+            </DialogHeader>
+            {editingGoal && (
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-name">Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editingGoal.name}
+                    onChange={(e) => setEditingGoal({ ...editingGoal, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-target">Target Amount (kr)</Label>
+                  <Input
+                    id="edit-target"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editingGoal.target}
+                    onChange={(e) =>
+                      setEditingGoal({
+                        ...editingGoal,
+                        target: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-description">Description (Optional)</Label>
+                  <Textarea
+                    id="edit-description"
+                    value={editingGoal.description || ""}
+                    onChange={(e) =>
+                      setEditingGoal({ ...editingGoal, description: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

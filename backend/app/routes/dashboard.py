@@ -22,8 +22,7 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
     })
     
     total_income = 0
-    shared_expenses = 0
-    personal_expenses = 0  # user1 + user2 expenses
+    total_expenses = 0
     total_savings = 0
     
     # Only calculate stats if budget exists for this month
@@ -42,24 +41,117 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
                 if category_type == "income":
                     total_income += amount
                 elif category_type == "expense":
-                    if owner_slot == "shared":
-                        shared_expenses += amount
-                    elif owner_slot in ["user1", "user2"]:
-                        personal_expenses += amount
+                    # Sum of Shared Expenses and Personal Expenses
+                    if owner_slot in ["shared", "user1", "user2"]:
+                        total_expenses += amount
                 elif category_type == "savings":
+                    # Only include Shared Savings
+                    if owner_slot == "shared":
+                        total_savings += amount
+                elif category_type == "fun":
+                    # Include all Fun
                     total_savings += amount
-                # Note: "fun" category is not included in NET INCOME calculation
     
-    # NET INCOME = Total Income - Shared Expenses - Personal Expenses
-    net_income = total_income - shared_expenses - personal_expenses
+    # NET INCOME = Total Income - Total Expenses
+    net_income = total_income - total_expenses
     
-    # Count achieved goals
-    goals_achieved = await goals_collection.count_documents({"achieved": True})
+    # Calculate lifetime shared savings for goal achievement calculation
+    pipeline = [
+        # 1. Match budgets for this user
+        {"$match": {"user_id": user_id}},
+        # 2. Lookup line items
+        {
+            "$lookup": {
+                "from": "budget_line_items",
+                "localField": "_id",
+                "foreignField": "budget_id",
+                "as": "items"
+            }
+        },
+        # 3. Unwind items
+        {"$unwind": "$items"},
+        # 4. Lookup category for each item
+        {
+            "$lookup": {
+                "from": "categories",
+                "localField": "items.category_id",
+                "foreignField": "_id",
+                "as": "category"
+            }
+        },
+        # 5. Unwind category (should be 1:1)
+        {"$unwind": "$category"},
+        # 6. Sum amounts based on type
+        {
+            "$group": {
+                "_id": None,
+                "total_shared_savings": {
+                    "$sum": {
+                        "$cond": [
+                            {"$and": [
+                                {"$eq": ["$category.type", "savings"]},
+                                {"$eq": ["$items.owner_slot", "shared"]}
+                            ]},
+                            "$items.amount",
+                            0
+                        ]
+                    }
+                },
+                "total_fun_savings": {
+                     "$sum": {
+                        "$cond": [
+                            {"$eq": ["$category.type", "fun"]},
+                            "$items.amount",
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+    
+    aggregation_result = await budgets_collection.aggregate(pipeline).to_list(length=1)
+    lifetime_shared_savings = aggregation_result[0]["total_shared_savings"] if aggregation_result else 0.0
+    lifetime_fun_savings = aggregation_result[0]["total_fun_savings"] if aggregation_result else 0.0
+    
+    # Calculate achieved goals based on hierarchy
+    goals_achieved_count = 0
+    remaining_shared = lifetime_shared_savings
+    remaining_fun = lifetime_fun_savings
+    
+    # Get all goals sorted by priority
+    cursor = goals_collection.find({"user_id": user_id}).sort("priority", 1)
+    async for goal in cursor:
+        target = goal.get("target_amount", 0)
+        goal_type = goal.get("type", "shared")
+        
+        # Select correct wallet
+        if goal_type == "shared":
+            remaining = remaining_shared
+        else: # fun
+            remaining = remaining_fun
+            
+        if target <= 0:
+            goals_achieved_count += 1
+            continue
+            
+        amount_for_goal = min(remaining, target)
+        
+        if amount_for_goal >= target:
+            goals_achieved_count += 1
+            
+        # Deduct used savings
+        if goal_type == "shared":
+             remaining_shared = max(0, remaining_shared - amount_for_goal)
+        else:
+             remaining_fun = max(0, remaining_fun - amount_for_goal)
+            
+    goals_achieved = goals_achieved_count
     
     return DashboardStats(
         net_income=net_income,
         savings=total_savings,
-        expenses=shared_expenses + personal_expenses,
+        expenses=total_expenses,
         goals_achieved=goals_achieved,
         income_change=0.0,
         savings_change=0.0,
@@ -68,53 +160,112 @@ async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/balance-trends", response_model=List[BalanceTrend])
-async def get_balance_trends():
-    """Get balance trends for chart"""
+async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
+    """
+    Get balance trends for chart (Lifetime Savings).
+    - Shared (Blue): Cumulative 'savings' type with 'shared' slot
+    - Personal (Green): Cumulative 'fun' type
+    """
     trends = []
     
-    # Generate sample data for the last 14 months
-    now = datetime.now()
-    personal_base = 4000
-    shared_base = 8000
+    # 1. Get all budgets for the user, sorted by date ascending
+    cursor = budgets_collection.find({"user_id": user_id}).sort("month", 1)
+    budgets = await cursor.to_list(length=None)
     
-    for i in range(14):
-        month_date = now - timedelta(days=30 * (13 - i))
-        month_str = month_date.strftime("%b. %Y")
+    cumulative_shared = 0.0
+    cumulative_fun = 0.0
+    
+    for budget in budgets:
+        budget_id = budget["_id"]
+        month_str = budget["month"] # "YYYY-MM"
+        
+        # Format month for chart (e.g. "Jan. 2026")
+        dt = datetime.strptime(month_str, "%Y-%m")
+        display_month = dt.strftime("%b. %Y")
+        
+        monthly_shared = 0.0
+        monthly_fun = 0.0
+        
+        # 2. Get line items for this budget
+        async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+            category = await categories_collection.find_one({"_id": item["category_id"]})
+            if not category:
+                continue
+                
+            cat_type = category.get("type")
+            amount = item.get("amount", 0)
+            slot = item.get("owner_slot", "")
+            
+            if cat_type == "savings" and slot == "shared":
+                monthly_shared += amount
+            elif cat_type == "fun":
+                # Assuming all 'fun' is counted as the "Green Line" per requirements
+                monthly_fun += amount
+                
+        cumulative_shared += monthly_shared
+        cumulative_fun += monthly_fun
         
         trends.append(BalanceTrend(
-            month=month_str,
-            personal=personal_base + (i * 500),
-            shared=shared_base + (i * 500) if i < 12 else shared_base + (i * 1000)
+            month=display_month,
+            personal=cumulative_fun, # Mapped to Green line
+            shared=cumulative_shared # Mapped to Blue line
         ))
     
+    # If no data, return empty or sample? Let's return empty if no budgets.
+    if not trends:
+        # Fallback to empty list so chart shows empty state instead of potentially confusing dummy data
+        return []
+        
     return trends
 
 
 @router.get("/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown():
-    """Get expense breakdown by category"""
-    # Calculate expenses by category for current month
-    now = datetime.now()
-    first_day = datetime(now.year, now.month, 1)
+async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+    """
+    Get expense breakdown by category for the current user's current month budget.
+    Only includes items where category type is 'expense' (Shared + Personal).
+    """
+    current_month_str = datetime.now().strftime("%Y-%m")
     
-    pipeline = [
-        {"$match": {"type": "expense", "date": {"$gte": first_day}}},
-        {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}}
-    ]
+    # Try to find budget for current month first
+    budget = await budgets_collection.find_one({
+        "month": current_month_str,
+        "user_id": user_id
+    })
     
+    if not budget:
+        return []
+        
+    budget_id = budget["_id"]
     category_totals = {}
     total_expenses = 0
     
-    async for result in transactions_collection.aggregate(pipeline):
-        category_totals[result["_id"]] = result["total"]
-        total_expenses += result["total"]
+    # Get budget line items
+    async for item in budget_line_items_collection.find({"budget_id": budget_id}):
+        category = await categories_collection.find_one({"_id": item["category_id"]})
+        if not category:
+            continue
+            
+        # Filter for Expense type
+        if category.get("type") != "expense":
+            continue
+            
+        # Includes Shared and Personal (user1/user2)
+        # Note: If we wanted to restrict personal to ONLY the current user slot, we might need more logic
+        # But request says "categories from shared expenses and personal expenses" which usually implies all expenses in the budget.
+        
+        amount = item.get("amount", 0)
+        cat_name = category.get("name", "Unknown")
+        
+        category_totals[cat_name] = category_totals.get(cat_name, 0) + amount
+        total_expenses += amount
     
     # Calculate percentages
     breakdown = []
-    for category, amount in category_totals.items():
+    for category_name, amount in category_totals.items():
         percentage = (amount / total_expenses * 100) if total_expenses > 0 else 0
         breakdown.append(ExpenseBreakdown(
-            category=category,
+            category=category_name,
             amount=amount,
             percentage=round(percentage, 1)
         ))
