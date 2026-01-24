@@ -1177,7 +1177,7 @@ export default function Settings() {
                 Clear All Budgets
               </h3>
               <p className="text-sm text-gray-600 mb-4">
-                This will permanently delete all budget records from the database. This includes all monthly budgets with income, expenses, and savings data you've entered.
+                This will permanently delete all budget records from the database. This includes all monthly budgets with income, expenses, and savings data you&apos;ve entered.
               </p>
               <div className="mb-6">
                 <span className="text-sm text-gray-700">Collection: </span>

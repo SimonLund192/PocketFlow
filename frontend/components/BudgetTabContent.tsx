@@ -1,5 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 import { Category } from "@/lib/categories-api";
+import { useState } from "react";
+import ConfirmationDialog from "@/components/ConfirmationDialog";
 
 interface BudgetItem {
   id: string;
@@ -34,6 +36,8 @@ export default function BudgetTabContent({
   saveButtonText,
   onSave,
 }: BudgetTabContentProps) {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+
   return (
     <>
       <div className="space-y-4">
@@ -129,7 +133,7 @@ export default function BudgetTabContent({
       {/* Save Button */}
       <div className="mt-6 flex justify-center">
         <button
-          onClick={onSave}
+          onClick={() => setIsConfirmOpen(true)}
           className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 transition-colors shadow-md hover:shadow-lg flex items-center gap-2"
         >
           <svg
@@ -143,6 +147,16 @@ export default function BudgetTabContent({
           {saveButtonText}
         </button>
       </div>
+
+      <ConfirmationDialog
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={onSave}
+        title="Save Budget"
+        description="Are you sure you want to save these changes to your budget?"
+        confirmText="Save"
+        cancelText="Cancel"
+      />
     </>
   );
 }
