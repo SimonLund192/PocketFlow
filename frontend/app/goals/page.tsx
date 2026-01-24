@@ -35,6 +35,13 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Tabs from "@/components/Tabs";
+import GoalItemsInput, { GoalItem as GoalItemType } from "@/components/GoalItemsInput";
+
+interface GoalItem {
+  url?: string;
+  name: string;
+  amount: number;
+}
 
 interface Goal {
   id: string;
@@ -45,6 +52,7 @@ interface Goal {
   completed: boolean;
   type: "shared" | "fun"; // Add type
   description?: string;
+  items?: GoalItem[];
 }
 
 function SortableGoalItem({
@@ -220,6 +228,7 @@ export default function Goals() {
   const [newGoalName, setNewGoalName] = useState("");
   const [newGoalAmount, setNewGoalAmount] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
+  const [newGoalItems, setNewGoalItems] = useState<GoalItemType[]>([]);
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
@@ -285,7 +294,8 @@ export default function Goals() {
             priority: goal.priority,
             completed: false, // Will be calculated
             type: goal.type === "fun" ? "fun" : "shared", // Determine type
-            description: goal.description
+            description: goal.description,
+            items: goal.items || []
         }));
 
         const processedGoals = recalculateAllGoals(initialGoals, totalSavings, totalFun);
@@ -310,6 +320,12 @@ export default function Goals() {
 
     try {
       const token = localStorage.getItem("token");
+      
+      // Calculate target amount from items
+      const targetAmount = newGoalItems.length > 0
+        ? newGoalItems.reduce((sum, item) => sum + item.amount, 0)
+        : parseFloat(newGoalAmount);
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
         method: "POST",
         headers: {
@@ -318,9 +334,10 @@ export default function Goals() {
         },
         body: JSON.stringify({
           name: newGoalName,
-          target_amount: parseFloat(newGoalAmount),
+          target_amount: targetAmount,
           description: newGoalDescription,
-          type: activeTab === "Fun Goals" ? "fun" : "shared" // Set type based on tab
+          type: activeTab === "Fun Goals" ? "fun" : "shared", // Set type based on tab
+          items: newGoalItems
         }),
       });
 
@@ -338,7 +355,8 @@ export default function Goals() {
         priority: goals.length + 1,
         completed: false,
         type: activeTab === "Fun Goals" ? "fun" : "shared", // Set type based on tab
-        description: createdGoal.description
+        description: createdGoal.description,
+        items: createdGoal.items || []
       };
 
       const updatedList = recalculateAllGoals([...goals, newGoalObj], totalSharedSavings, totalFunSavings);
@@ -347,6 +365,7 @@ export default function Goals() {
       setNewGoalName("");
       setNewGoalAmount("");
       setNewGoalDescription("");
+      setNewGoalItems([]);
       
       // Select the new goal if it's the first one
       if (goals.length === 0) {
@@ -366,6 +385,12 @@ export default function Goals() {
 
     try {
       const token = localStorage.getItem("token");
+      
+      // Calculate target amount from items if present
+      const targetAmount = (editingGoal.items && editingGoal.items.length > 0)
+        ? editingGoal.items.reduce((sum, item) => sum + item.amount, 0)
+        : editingGoal.target;
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${editingGoal.id}`, {
         method: "PUT",
         headers: {
@@ -374,8 +399,9 @@ export default function Goals() {
         },
         body: JSON.stringify({
           name: editingGoal.name,
-          target_amount: editingGoal.target,
-          description: editingGoal.description
+          target_amount: targetAmount,
+          description: editingGoal.description,
+          items: editingGoal.items || []
         }),
       });
 
@@ -393,7 +419,8 @@ export default function Goals() {
         priority: editingGoal.priority, // Keep existing priority
         completed: updatedGoal.achieved,
         type: editingGoal.type, // Keep existing type
-        description: updatedGoal.description
+        description: updatedGoal.description,
+        items: updatedGoal.items || []
       };
 
       const updatedList = goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g);
@@ -709,7 +736,7 @@ export default function Goals() {
 
       {/* Add Goal Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleAddGoal}>
             <DialogHeader>
               <DialogTitle>Add {activeTab === "Shared Goals" ? "Shared" : "Fun"} Goal</DialogTitle>
@@ -724,20 +751,7 @@ export default function Goals() {
                   id="name"
                   value={newGoalName}
                   onChange={(e) => setNewGoalName(e.target.value)}
-                  placeholder="e.g. New Car"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="target">Target Amount (kr)</Label>
-                <Input
-                  id="target"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newGoalAmount}
-                  onChange={(e) => setNewGoalAmount(e.target.value)}
-                  placeholder="0.00"
+                  placeholder="e.g. Vacation to Italy"
                   required
                 />
               </div>
@@ -750,12 +764,18 @@ export default function Goals() {
                   placeholder="What is this goal for?"
                 />
               </div>
+              <div className="border-t pt-4">
+                <GoalItemsInput
+                  items={newGoalItems}
+                  onChange={setNewGoalItems}
+                />
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setIsAddModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || newGoalItems.length === 0}>
                 {loading ? "Creating..." : "Create Goal"}
               </Button>
             </DialogFooter>
@@ -765,7 +785,7 @@ export default function Goals() {
 
       {/* Edit Goal Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleEditGoal}>
             <DialogHeader>
               <DialogTitle>Edit Goal</DialogTitle>
@@ -785,23 +805,6 @@ export default function Goals() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="edit-target">Target Amount (kr)</Label>
-                  <Input
-                    id="edit-target"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editingGoal.target}
-                    onChange={(e) =>
-                      setEditingGoal({
-                        ...editingGoal,
-                        target: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
                   <Label htmlFor="edit-description">Description (Optional)</Label>
                   <Textarea
                     id="edit-description"
@@ -809,6 +812,12 @@ export default function Goals() {
                     onChange={(e) =>
                       setEditingGoal({ ...editingGoal, description: e.target.value })
                     }
+                  />
+                </div>
+                <div className="border-t pt-4">
+                  <GoalItemsInput
+                    items={editingGoal.items || []}
+                    onChange={(items) => setEditingGoal({ ...editingGoal, items })}
                   />
                 </div>
               </div>
@@ -821,7 +830,7 @@ export default function Goals() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || (editingGoal?.items?.length === 0)}>
                 {loading ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>

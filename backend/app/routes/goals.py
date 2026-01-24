@@ -9,11 +9,17 @@ from pymongo import UpdateOne
 
 router = APIRouter()
 
+class GoalItem(BaseModel):
+    url: Optional[str] = None
+    name: str
+    amount: float
+
 class GoalBase(BaseModel):
     name: str
     target_amount: float
     description: Optional[str] = None
     type: Optional[str] = "shared" # "shared" or "fun"
+    items: Optional[List[GoalItem]] = []
 
 class GoalCreate(GoalBase):
     pass
@@ -26,6 +32,7 @@ class GoalResponse(GoalBase):
     priority: int
     created_at: datetime
     type: str # Return actual type
+    items: List[GoalItem]
     
     class Config:
         populate_by_name = True
@@ -38,12 +45,17 @@ class GoalUpdate(BaseModel):
     target_amount: float
     description: Optional[str] = None
     type: Optional[str] = None
+    items: Optional[List[GoalItem]] = None
 
 @router.post("", response_model=GoalResponse, status_code=201)
 async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_id)):
     """Create a new goal for the logged-in user."""
     
     goal_type = goal.type or "shared"
+    
+    # Calculate total from items if provided, otherwise use target_amount
+    items_list = [item.model_dump() for item in (goal.items or [])]
+    calculated_target = sum(item["amount"] for item in items_list) if items_list else goal.target_amount
 
     # Calculate new priority (highest + 1) within the specific type
     match_query = {
@@ -63,10 +75,11 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         "_id": str(uuid.uuid4()), # Using UUID for ID to match potential frontend string IDs
         "user_id": user_id,
         "name": goal.name,
-        "target_amount": goal.target_amount,
+        "target_amount": calculated_target,
         "current_amount": 0.0,
         "description": goal.description,
         "type": goal_type,
+        "items": items_list,
         "achieved": False,
         "priority": new_priority,
         "created_at": datetime.now(timezone.utc),
@@ -87,6 +100,7 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         current_amount=created_goal["current_amount"],
         description=created_goal.get("description"),
         type=created_goal.get("type", "shared"),
+        items=[GoalItem(**item) for item in created_goal.get("items", [])],
         achieved=created_goal["achieved"],
         priority=created_goal.get("priority", 0),
         created_at=created_goal["created_at"]
@@ -106,6 +120,7 @@ async def get_goals(user_id: str = Depends(get_current_user_id)):
             current_amount=goal["current_amount"],
             description=goal.get("description"),
             type=goal.get("type", "shared"), # Default to shared
+            items=[GoalItem(**item) for item in goal.get("items", [])],
             achieved=goal["achieved"],
             priority=goal.get("priority", 0),
             created_at=goal["created_at"]
@@ -133,12 +148,21 @@ async def reorder_goals(reorder_data: GoalReorder, user_id: str = Depends(get_cu
 async def update_goal(goal_id: str, goal: GoalUpdate, user_id: str = Depends(get_current_user_id)):
     """Update a goal for the logged-in user."""
     
+    # Calculate total from items if provided
     update_fields = {
         "name": goal.name,
-        "target_amount": goal.target_amount,
         "description": goal.description,
         "updated_at": datetime.now(timezone.utc)
     }
+    
+    # If items are provided, calculate target_amount from them
+    if goal.items is not None:
+        items_list = [item.model_dump() for item in goal.items]
+        calculated_target = sum(item["amount"] for item in items_list)
+        update_fields["target_amount"] = calculated_target
+        update_fields["items"] = items_list
+    else:
+        update_fields["target_amount"] = goal.target_amount
     
     # Only update type if provided to avoid overwriting existing type with default
     if goal.type is not None:
@@ -161,6 +185,7 @@ async def update_goal(goal_id: str, goal: GoalUpdate, user_id: str = Depends(get
         current_amount=updated_goal["current_amount"],
         description=updated_goal.get("description"),
         type=updated_goal.get("type", "shared"),
+        items=[GoalItem(**item) for item in updated_goal.get("items", [])],
         achieved=updated_goal["achieved"],
         priority=updated_goal.get("priority", 0),
         created_at=updated_goal["created_at"]
