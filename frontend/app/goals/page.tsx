@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getBalanceTrends } from "@/lib/dashboard-api";
 
 interface Goal {
   id: string;
@@ -37,32 +38,68 @@ export default function Goals() {
   const [loading, setLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [totalSharedSavings, setTotalSharedSavings] = useState(0);
+
+  const recalculateGoals = (currentGoals: Goal[], totalSavings: number): Goal[] => {
+    let remaining = totalSavings;
+    // Sort by priority ensures hierarchy is respected
+    const sortedGoals = [...currentGoals].sort((a, b) => a.priority - b.priority);
+    
+    return sortedGoals.map(goal => {
+      const amount = Math.min(remaining, goal.target);
+      remaining = Math.max(0, remaining - amount);
+      const isCompleted = amount >= goal.target; 
+      
+      return {
+        ...goal,
+        saved: amount,
+        completed: isCompleted
+      };
+    });
+  };
 
   useEffect(() => {
     const fetchGoals = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
+        
+        // Fetch goals and balance trends in parallel
+        const [goalsResponse, balanceTrends] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          }),
+          getBalanceTrends()
+        ]);
 
-        if (response.ok) {
-          const data = await response.json();
-          const mappedGoals: Goal[] = data.map((g: any, index: number) => ({
-            id: g.id,
-            name: g.name,
-            saved: g.current_amount,
-            target: g.target_amount,
-            priority: index + 1,
-            completed: g.achieved,
-            description: g.description
-          }));
-          setGoals(mappedGoals);
-          if (mappedGoals.length > 0 && !selectedGoal) {
-            setSelectedGoal(mappedGoals[0]);
-          }
+        if (!goalsResponse.ok) {
+          throw new Error("Failed to fetch goals");
+        }
+
+        const goalsData = await goalsResponse.json();
+        
+        // Calculate total shared savings from trends
+        const latestTrend = balanceTrends.length > 0 ? balanceTrends[balanceTrends.length - 1] : { shared: 0 };
+        const totalSavings = latestTrend.shared;
+        setTotalSharedSavings(totalSavings);
+
+        // Map API response to Goal interface
+        const initialGoals: Goal[] = goalsData.map((goal: any) => ({
+            id: goal.id,
+            name: goal.name,
+            saved: 0, // Will be calculated
+            target: goal.target_amount,
+            priority: goal.priority,
+            completed: false, // Will be calculated
+            description: goal.description
+        }));
+
+        const processedGoals = recalculateGoals(initialGoals, totalSavings);
+        setGoals(processedGoals);
+        
+        if (processedGoals.length > 0 && !selectedGoal) {
+          setSelectedGoal(processedGoals[0]);
         }
       } catch (error) {
         console.error("Error fetching goals:", error);
@@ -100,14 +137,15 @@ export default function Goals() {
       const newGoalObj: Goal = {
         id: createdGoal.id,
         name: createdGoal.name,
-        saved: createdGoal.current_amount,
+        saved: 0, 
         target: createdGoal.target_amount,
         priority: goals.length + 1,
-        completed: createdGoal.achieved,
+        completed: false,
         description: createdGoal.description
       };
 
-      setGoals([...goals, newGoalObj]);
+      const updatedList = recalculateGoals([...goals, newGoalObj], totalSharedSavings);
+      setGoals(updatedList);
       setIsAddModalOpen(false);
       setNewGoalName("");
       setNewGoalAmount("");
@@ -115,7 +153,7 @@ export default function Goals() {
       
       // Select the new goal if it's the first one
       if (goals.length === 0) {
-        setSelectedGoal(newGoalObj);
+        setSelectedGoal(updatedList[0]);
       }
     } catch (error) {
       console.error("Error creating goal:", error);
@@ -160,11 +198,15 @@ export default function Goals() {
         description: updatedGoal.description
       };
 
-      setGoals(goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g));
+      const updatedList = goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g);
+      const recalculatedList = recalculateGoals(updatedList, totalSharedSavings);
+      setGoals(recalculatedList);
       setIsEditModalOpen(false);
       setEditingGoal(null);
       if (selectedGoal?.id === updatedGoal.id) {
-        setSelectedGoal(updatedGoalObj);
+        // Find the updated goal in the recalculated list
+        const latestSelected = recalculatedList.find(g => g.id === updatedGoal.id);
+        if (latestSelected) setSelectedGoal(latestSelected);
       }
     } catch (error) {
       console.error("Error updating goal:", error);
@@ -189,11 +231,12 @@ export default function Goals() {
         throw new Error("Failed to delete goal");
       }
 
-      const updatedGoals = goals.filter(g => g.id !== goalId);
-      setGoals(updatedGoals);
+      const filteredGoals = goals.filter(g => g.id !== goalId);
+      const recalculatedLabels = recalculateGoals(filteredGoals, totalSharedSavings);
+      setGoals(recalculatedLabels);
       
       if (selectedGoal?.id === goalId) {
-        setSelectedGoal(updatedGoals.length > 0 ? updatedGoals[0] : null);
+        setSelectedGoal(recalculatedLabels.length > 0 ? recalculatedLabels[0] : null);
       }
     } catch (error) {
       console.error("Error deleting goal:", error);
