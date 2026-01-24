@@ -16,7 +16,7 @@ class AIAgent:
 
         try:
             # First LLM call
-            ai_message = await self.client.generate_response(
+            ai_message = await self.client.chat(
                 messages=messages,
                 tools=self.available_tools if self.available_tools else None
             )
@@ -44,7 +44,7 @@ class AIAgent:
                         })
                 
                 # Get final response after tool execution
-                final_response = await self.client.generate_response(messages=messages)
+                final_response = await self.client.chat(messages=messages)
                 response_text = final_response.content
                 
                 # Update history
