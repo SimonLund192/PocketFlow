@@ -17,6 +17,23 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getBalanceTrends } from "@/lib/dashboard-api";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface Goal {
   id: string;
@@ -26,6 +43,171 @@ interface Goal {
   priority: number;
   completed: boolean;
   description?: string;
+}
+
+function SortableGoalItem({
+  goal,
+  selectedGoal,
+  setSelectedGoal,
+  openEditModal,
+  deleteGoalHandler,
+  getProgress,
+}: {
+  goal: Goal;
+  selectedGoal: Goal | null;
+  setSelectedGoal: (goal: Goal) => void;
+  openEditModal: (goal: Goal, e: React.MouseEvent) => void;
+  deleteGoalHandler: (goalId: string, e: React.MouseEvent) => void;
+  getProgress: (goal: Goal) => number;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: goal.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
+    position: 'relative' as 'relative',
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card
+        className={`p-8 cursor-pointer transition-all rounded-3xl ${
+          selectedGoal?.id === goal.id
+            ? "bg-indigo-600 text-white shadow-lg"
+            : "bg-white hover:shadow-md border-2 border-gray-900"
+        }`}
+        onClick={() => setSelectedGoal(goal)}
+      >
+        <div className="flex items-center gap-6">
+          <button
+            className={`p-1 rounded transition-colors cursor-grab active:cursor-grabbing ${
+              selectedGoal?.id === goal.id
+                ? "text-white/80 hover:text-white"
+                : "text-gray-400 hover:text-gray-600"
+            }`}
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()} 
+          >
+            <Grip className="w-6 h-6" />
+          </button>
+          <div
+            className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
+              selectedGoal?.id === goal.id
+                ? "bg-indigo-500 text-white"
+                : "bg-blue-100 text-indigo-600"
+            }`}
+          >
+            #{goal.priority}
+          </div>
+
+          {goal.completed ? (
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
+              style={{
+                borderColor:
+                  selectedGoal?.id === goal.id
+                    ? "rgba(255,255,255,0.4)"
+                    : "#22c55e",
+                backgroundColor:
+                  selectedGoal?.id === goal.id
+                    ? "rgba(255,255,255,0.2)"
+                    : "white",
+                color: selectedGoal?.id === goal.id ? "white" : "#22c55e",
+              }}
+            >
+              100%
+            </div>
+          ) : (
+            <div className="relative w-24 h-24">
+              <svg
+                className="w-24 h-24 transform -rotate-90"
+                viewBox="0 0 100 100"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke={
+                    selectedGoal?.id === goal.id
+                      ? "rgba(255,255,255,0.2)"
+                      : "#e5e7eb"
+                  }
+                  strokeWidth="8"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke={
+                    selectedGoal?.id === goal.id
+                      ? "rgba(255,255,255,0.4)"
+                      : "#22c55e"
+                  }
+                  strokeWidth="8"
+                  strokeDasharray={`${getProgress(goal) * 2.64} ${100 * 2.64}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span
+                  className={`text-2xl font-bold ${
+                    selectedGoal?.id === goal.id ? "text-white" : "text-gray-900"
+                  }`}
+                >
+                  {Math.round(getProgress(goal))}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1">
+            <h3 className="text-2xl font-bold mb-2">{goal.name}</h3>
+            <p
+              className={`text-base ${
+                selectedGoal?.id === goal.id ? "text-white/90" : "text-gray-600"
+              }`}
+            >
+              {goal.saved.toFixed(2)} kr / {goal.target.toFixed(2)} kr
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              className={`p-3 rounded-lg transition-colors ${
+                selectedGoal?.id === goal.id
+                  ? "hover:bg-white/10"
+                  : "hover:bg-gray-100"
+              }`}
+              onClick={(e) => openEditModal(goal, e)}
+            >
+              <Pencil className="w-5 h-5" />
+            </button>
+            <button
+              className={`p-3 rounded-lg transition-colors ${
+                selectedGoal?.id === goal.id
+                  ? "hover:bg-white/10"
+                  : "hover:bg-gray-100"
+              }`}
+              onClick={(e) => deleteGoalHandler(goal.id, e)}
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 export default function Goals() {
@@ -270,6 +452,54 @@ export default function Goals() {
     return Math.max(goal.target - goal.saved, 0);
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = goals.findIndex((g) => g.id === active.id);
+      const newIndex = goals.findIndex((g) => g.id === over.id);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        // Reorder array locally
+        const reorderedGoals = arrayMove(goals, oldIndex, newIndex);
+        
+        // Update priorities based on new index
+        const updatedGoals = reorderedGoals.map((g, i) => ({
+          ...g,
+          priority: i + 1
+        }));
+        
+        // Recalculate savings distribution based on new hierarchy
+        const finalGoals = recalculateGoals(updatedGoals, totalSharedSavings);
+        setGoals(finalGoals);
+
+        // API Call to persist order
+        try {
+          const token = localStorage.getItem("token");
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/reorder`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              goal_ids: updatedGoals.map(g => g.id)
+            })
+          });
+        } catch (error) {
+          console.error("Failed to reorder goals:", error);
+        }
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header 
@@ -298,104 +528,28 @@ export default function Goals() {
         <div className="grid grid-cols-[540px_1fr] gap-6">
           {/* Left Column - Goals List */}
           <div className="space-y-4">
-            {goals.map((goal) => (
-              <Card
-                key={goal.id}
-                className={`p-8 cursor-pointer transition-all rounded-3xl ${
-                  selectedGoal?.id === goal.id
-                    ? "bg-indigo-600 text-white shadow-lg"
-                    : "bg-white hover:shadow-md border-2 border-gray-900"
-                }`}
-                onClick={() => setSelectedGoal(goal)}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={goals.map(goal => goal.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="flex items-center gap-6">
-                  <button className={`p-1 rounded transition-colors ${
-                    selectedGoal?.id === goal.id ? "text-white/80 hover:text-white" : "text-gray-400 hover:text-gray-600"
-                  }`}>
-                    <Grip className="w-6 h-6" />
-                  </button>
-                  <div
-                    className={`w-16 h-16 rounded-full flex items-center justify-center text-lg font-bold ${
-                      selectedGoal?.id === goal.id
-                        ? "bg-indigo-500 text-white"
-                        : "bg-blue-100 text-indigo-600"
-                    }`}
-                  >
-                    #{goal.priority}
-                  </div>
-                  
-                  {goal.completed ? (
-                      <div
-                      className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold border-8"
-                      style={{
-                          borderColor: selectedGoal?.id === goal.id ? "rgba(255,255,255,0.4)" : "#22c55e",
-                          backgroundColor: selectedGoal?.id === goal.id ? "rgba(255,255,255,0.2)" : "white",
-                          color: selectedGoal?.id === goal.id ? "white" : "#22c55e",
-                      }}
-                      >
-                      100%
-                      </div>
-                  ) : (
-                      <div className="relative w-24 h-24">
-                        <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 100 100">
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="42"
-                            fill="none"
-                            stroke={selectedGoal?.id === goal.id ? "rgba(255,255,255,0.2)" : "#e5e7eb"}
-                            strokeWidth="8"
-                          />
-                          <circle
-                            cx="50"
-                            cy="50"
-                            r="42"
-                            fill="none"
-                            stroke={selectedGoal?.id === goal.id ? "rgba(255,255,255,0.4)" : "#22c55e"}
-                            strokeWidth="8"
-                            strokeDasharray={`${getProgress(goal) * 2.64} ${100 * 2.64}`}
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className={`text-2xl font-bold ${selectedGoal?.id === goal.id ? "text-white" : "text-gray-900"}`}>
-                            {Math.round(getProgress(goal))}%
-                          </span>
-                        </div>
-                      </div>
-                  )}
-
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-bold mb-2">{goal.name}</h3>
-                    <p className={`text-base ${selectedGoal?.id === goal.id ? "text-white/90" : "text-gray-600"}`}>
-                      {goal.saved.toFixed(2)} kr / {goal.target.toFixed(2)} kr
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      className={`p-3 rounded-lg transition-colors ${
-                        selectedGoal?.id === goal.id
-                          ? "hover:bg-white/10"
-                          : "hover:bg-gray-100"
-                      }`}
-                      onClick={(e) => openEditModal(goal, e)}
-                    >
-                      <Pencil className="w-5 h-5" />
-                    </button>
-                    <button
-                      className={`p-3 rounded-lg transition-colors ${
-                        selectedGoal?.id === goal.id
-                          ? "hover:bg-white/10"
-                          : "hover:bg-gray-100"
-                      }`}
-                      onClick={(e) => deleteGoalHandler(goal.id, e)}
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                {goals.map((goal) => (
+                  <SortableGoalItem
+                    key={goal.id}
+                    goal={goal}
+                    selectedGoal={selectedGoal}
+                    setSelectedGoal={setSelectedGoal}
+                    openEditModal={openEditModal}
+                    deleteGoalHandler={deleteGoalHandler}
+                    getProgress={getProgress}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
 
             {/* Add New Goal */}
             <button 
@@ -518,7 +672,7 @@ export default function Goals() {
           <DialogHeader>
             <DialogTitle>Add New Goal</DialogTitle>
             <DialogDescription>
-              Set a new savings target. Goals are prioritized top to bottom.
+              Create a new savings goal. Goals work hierarchically.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddGoal}>

@@ -5,6 +5,7 @@ from app.database import goals_collection
 from app.dependencies import get_current_user_id
 from datetime import datetime, timezone
 import uuid
+from pymongo import UpdateOne
 
 router = APIRouter()
 
@@ -21,15 +22,26 @@ class GoalResponse(GoalBase):
     user_id: str
     current_amount: float
     achieved: bool
+    priority: int
     created_at: datetime
     
     class Config:
         populate_by_name = True
 
+class GoalReorder(BaseModel):
+    goal_ids: List[str]
+
 @router.post("", response_model=GoalResponse, status_code=201)
 async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_id)):
     """Create a new goal for the logged-in user."""
     
+    # Calculate new priority (highest + 1)
+    highest_priority_goal = await goals_collection.find_one(
+        {"user_id": user_id},
+        sort=[("priority", -1)]
+    )
+    new_priority = (highest_priority_goal["priority"] + 1) if highest_priority_goal and "priority" in highest_priority_goal else 1
+
     new_goal = {
         "_id": str(uuid.uuid4()), # Using UUID for ID to match potential frontend string IDs
         "user_id": user_id,
@@ -38,6 +50,7 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         "current_amount": 0.0,
         "description": goal.description,
         "achieved": False,
+        "priority": new_priority,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc)
     }
@@ -56,6 +69,7 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
         current_amount=created_goal["current_amount"],
         description=created_goal.get("description"),
         achieved=created_goal["achieved"],
+        priority=created_goal.get("priority", 0),
         created_at=created_goal["created_at"]
     )
 
@@ -63,7 +77,8 @@ async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_
 async def get_goals(user_id: str = Depends(get_current_user_id)):
     """Get all goals for the logged-in user."""
     goals = []
-    async for goal in goals_collection.find({"user_id": user_id}):
+    # Sort by priority ascending
+    async for goal in goals_collection.find({"user_id": user_id}).sort("priority", 1):
         goals.append(GoalResponse(
             id=str(goal["_id"]), # Ensure string ID
             user_id=goal["user_id"],
@@ -72,9 +87,27 @@ async def get_goals(user_id: str = Depends(get_current_user_id)):
             current_amount=goal["current_amount"],
             description=goal.get("description"),
             achieved=goal["achieved"],
+            priority=goal.get("priority", 0),
             created_at=goal["created_at"]
         ))
     return goals
+
+@router.put("/reorder", status_code=204)
+async def reorder_goals(reorder_data: GoalReorder, user_id: str = Depends(get_current_user_id)):
+    """Reorder goals based on the list of IDs provided."""
+    goal_ids = reorder_data.goal_ids
+    operations = []
+    
+    for index, goal_id in enumerate(goal_ids):
+        operations.append(
+            UpdateOne(
+                {"_id": goal_id, "user_id": user_id}, 
+                {"$set": {"priority": index + 1}}
+            )
+        )
+    
+    if operations:
+        await goals_collection.bulk_write(operations)
 
 @router.put("/{goal_id}", response_model=GoalResponse)
 async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_current_user_id)):
@@ -102,6 +135,7 @@ async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_c
         current_amount=updated_goal["current_amount"],
         description=updated_goal.get("description"),
         achieved=updated_goal["achieved"],
+        priority=updated_goal.get("priority", 0),
         created_at=updated_goal["created_at"]
     )
 
