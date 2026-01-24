@@ -75,3 +75,43 @@ async def get_goals(user_id: str = Depends(get_current_user_id)):
             created_at=goal["created_at"]
         ))
     return goals
+
+@router.put("/{goal_id}", response_model=GoalResponse)
+async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_current_user_id)):
+    """Update a goal for the logged-in user."""
+    
+    updated_goal = await goals_collection.find_one_and_update(
+        {"_id": goal_id, "user_id": user_id},
+        {"$set": {
+            "name": goal.name,
+            "target_amount": goal.target_amount,
+            "description": goal.description,
+            "updated_at": datetime.now(timezone.utc)
+        }},
+        return_document=True
+    )
+    
+    if not updated_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+        
+    return GoalResponse(
+        id=updated_goal["_id"],
+        user_id=updated_goal["user_id"],
+        name=updated_goal["name"],
+        target_amount=updated_goal["target_amount"],
+        current_amount=updated_goal["current_amount"],
+        description=updated_goal.get("description"),
+        achieved=updated_goal["achieved"],
+        created_at=updated_goal["created_at"]
+    )
+
+@router.delete("/{goal_id}", status_code=204)
+async def delete_goal(goal_id: str, user_id: str = Depends(get_current_user_id)):
+    """Delete a goal for the logged-in user."""
+    
+    result = await goals_collection.delete_one({"_id": goal_id, "user_id": user_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    return None

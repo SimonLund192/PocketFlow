@@ -35,6 +35,8 @@ export default function Goals() {
   const [newGoalAmount, setNewGoalAmount] = useState("");
   const [newGoalDescription, setNewGoalDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
   useEffect(() => {
     const fetchGoals = async () => {
@@ -120,6 +122,93 @@ export default function Goals() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGoal) return;
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${editingGoal.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: editingGoal.name,
+          target_amount: editingGoal.target,
+          description: editingGoal.description
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update goal");
+      }
+
+      const updatedGoal = await response.json();
+      
+      const updatedGoalObj: Goal = {
+        id: updatedGoal.id,
+        name: updatedGoal.name,
+        saved: updatedGoal.current_amount,
+        target: updatedGoal.target_amount,
+        priority: editingGoal.priority, // Keep existing priority
+        completed: updatedGoal.achieved,
+        description: updatedGoal.description
+      };
+
+      setGoals(goals.map(g => g.id === updatedGoal.id ? updatedGoalObj : g));
+      setIsEditModalOpen(false);
+      setEditingGoal(null);
+      if (selectedGoal?.id === updatedGoal.id) {
+        setSelectedGoal(updatedGoalObj);
+      }
+    } catch (error) {
+      console.error("Error updating goal:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!confirm("Are you sure you want to delete this goal?")) return;
+    
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${goalId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete goal");
+      }
+
+      const updatedGoals = goals.filter(g => g.id !== goalId);
+      setGoals(updatedGoals);
+      
+      if (selectedGoal?.id === goalId) {
+        setSelectedGoal(updatedGoals.length > 0 ? updatedGoals[0] : null);
+      }
+    } catch (error) {
+      console.error("Error deleting goal:", error);
+    }
+  };
+
+  const openEditModal = (goal: Goal, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingGoal(goal);
+    setIsEditModalOpen(true);
+  };
+
+  const deleteGoalHandler = (goalId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleDeleteGoal(goalId);
   };
 
   useEffect(() => {
@@ -246,6 +335,7 @@ export default function Goals() {
                           ? "hover:bg-white/10"
                           : "hover:bg-gray-100"
                       }`}
+                      onClick={(e) => openEditModal(goal, e)}
                     >
                       <Pencil className="w-5 h-5" />
                     </button>
@@ -255,6 +345,7 @@ export default function Goals() {
                           ? "hover:bg-white/10"
                           : "hover:bg-gray-100"
                       }`}
+                      onClick={(e) => deleteGoalHandler(goal.id, e)}
                     >
                       <Trash2 className="w-5 h-5" />
                     </button>
@@ -428,6 +519,62 @@ export default function Goals() {
               </Button>
               <Button type="submit" disabled={loading}>
                 {loading ? "Creating..." : "Create Goal"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Goal Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Goal</DialogTitle>
+            <DialogDescription>
+              Update your savings goal details.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditGoal}>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-name">Goal Name</Label>
+                <Input
+                  id="edit-name"
+                  value={editingGoal?.name}
+                  onChange={(e) => setEditingGoal({ ...editingGoal!, name: e.target.value })}
+                  placeholder="e.g., New Car"
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-amount">Target Amount (kr)</Label>
+                <Input
+                  id="edit-amount"
+                  type="number"
+                  value={editingGoal?.target}
+                  onChange={(e) => setEditingGoal({ ...editingGoal!, target: parseFloat(e.target.value) })}
+                  placeholder="e.g., 50000"
+                  required
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-description">Description (Optional)</Label>
+                <Textarea
+                  id="edit-description"
+                  value={editingGoal?.description}
+                  onChange={(e) => setEditingGoal({ ...editingGoal!, description: e.target.value })}
+                  placeholder="What is this goal for?"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Updating..." : "Update Goal"}
               </Button>
             </DialogFooter>
           </form>
