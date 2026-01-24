@@ -33,6 +33,12 @@ class GoalResponse(GoalBase):
 class GoalReorder(BaseModel):
     goal_ids: List[str]
 
+class GoalUpdate(BaseModel):
+    name: str
+    target_amount: float
+    description: Optional[str] = None
+    type: Optional[str] = None
+
 @router.post("", response_model=GoalResponse, status_code=201)
 async def create_goal(goal: GoalCreate, user_id: str = Depends(get_current_user_id)):
     """Create a new goal for the logged-in user."""
@@ -124,18 +130,23 @@ async def reorder_goals(reorder_data: GoalReorder, user_id: str = Depends(get_cu
         await goals_collection.bulk_write(operations)
 
 @router.put("/{goal_id}", response_model=GoalResponse)
-async def update_goal(goal_id: str, goal: GoalBase, user_id: str = Depends(get_current_user_id)):
+async def update_goal(goal_id: str, goal: GoalUpdate, user_id: str = Depends(get_current_user_id)):
     """Update a goal for the logged-in user."""
+    
+    update_fields = {
+        "name": goal.name,
+        "target_amount": goal.target_amount,
+        "description": goal.description,
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Only update type if provided to avoid overwriting existing type with default
+    if goal.type is not None:
+        update_fields["type"] = goal.type
     
     updated_goal = await goals_collection.find_one_and_update(
         {"_id": goal_id, "user_id": user_id},
-        {"$set": {
-            "name": goal.name,
-            "target_amount": goal.target_amount,
-            "description": goal.description,
-            "type": goal.type or "shared",
-            "updated_at": datetime.now(timezone.utc)
-        }},
+        {"$set": update_fields},
         return_document=True
     )
     
