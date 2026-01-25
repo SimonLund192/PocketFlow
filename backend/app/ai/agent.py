@@ -1,5 +1,7 @@
 from typing import List, Dict, Any
 import json
+from datetime import datetime
+from pathlib import Path
 from .client import LLMClient
 from .tools import tools_registry, get_tool_definitions
 from .schemas import AIChatRequest, AIChatResponse, AIChatMessage
@@ -9,9 +11,36 @@ class AIAgent:
     def __init__(self):
         self.client = LLMClient()
         self.available_tools = get_tool_definitions()
+        self.system_prompt_path = Path(__file__).parent / "system_prompt.txt"
+    
+    def _load_system_prompt(self) -> str:
+        """Load and format the system prompt with current date context"""
+        try:
+            with open(self.system_prompt_path, 'r') as f:
+                prompt_template = f.read()
+            
+            current_date = datetime.now().strftime("%B %d, %Y")  # e.g., "January 25, 2026"
+            current_month = datetime.now().strftime("%Y-%m")  # e.g., "2026-01"
+            
+            return prompt_template.format(
+                current_date=current_date,
+                current_month=current_month
+            )
+        except Exception as e:
+            ai_logger.error(f"Error loading system prompt: {e}")
+            # Fallback to basic prompt
+            return f"You are a helpful financial assistant. Today's date is {datetime.now().strftime('%B %d, %Y')}."
 
     async def process_request(self, request: AIChatRequest, user_id: str) -> AIChatResponse:
         messages = [msg.model_dump(exclude_none=True) for msg in request.messages]
+        
+        # Add system message with current date and context if not already present
+        if not messages or messages[0].get("role") != "system":
+            system_message = {
+                "role": "system",
+                "content": self._load_system_prompt()
+            }
+            messages.insert(0, system_message)
 
         try:
             # First LLM call
