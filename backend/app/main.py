@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routes import transactions, dashboard, auth, categories, database, budgets, budget_line_items, admin, goals
+from app.routes import transactions, dashboard, auth, categories, database, budgets, budget_line_items, admin, goals, ai
 from app.database import create_indexes
 import logging
 
@@ -51,6 +51,7 @@ app.include_router(database.router, tags=["database"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["transactions"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
+app.include_router(ai.router, tags=["ai"])
 
 @app.get("/")
 async def root():
