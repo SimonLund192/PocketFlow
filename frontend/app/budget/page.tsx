@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
 import BudgetTabContent from "@/components/BudgetTabContent";
+import ConfirmationDialog from "@/components/ConfirmationDialog";
 import { TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { categoriesApi, Category } from "@/lib/categories-api";
@@ -85,6 +86,10 @@ export default function BudgetPage() {
 
   // User 2 Income items
   const [user2IncomeItems, setUser2IncomeItems] = useState<BudgetItem[]>([]);
+
+  // Save confirmation dialog state
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveDialogMessage, setSaveDialogMessage] = useState("");
 
   // Refs for debouncing saves
   const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -476,35 +481,34 @@ export default function BudgetPage() {
   // Manual save function for Save Budget button
   const saveBudget = async () => {
     if (!currentBudget) {
-      alert('No budget loaded. Please wait for the page to load.');
+      setSaveDialogMessage('No budget loaded. Please wait for the page to load.');
+      setShowSaveDialog(true);
       return;
     }
 
     console.log('=== MANUAL SAVE TRIGGERED ===');
-    console.log('User 1 income items:', user1IncomeItems);
-    console.log('User 2 income items:', user2IncomeItems);
-
+    
     let savedCount = 0;
     let errorCount = 0;
 
-    // Save all User 1 income items
-    for (const item of user1IncomeItems) {
-      try {
-        await saveItem(item, 'user1', setUser1IncomeItems);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save user1 item:', item, error);
-        errorCount++;
-      }
-    }
+    // Collect all items from all tabs
+    const allItems: Array<{ item: BudgetItem; setter: any; owner: "user1" | "user2" | "shared" }> = [
+      ...user1IncomeItems.map(item => ({ item, setter: setUser1IncomeItems, owner: 'user1' as const })),
+      ...user2IncomeItems.map(item => ({ item, setter: setUser2IncomeItems, owner: 'user2' as const })),
+      ...sharedExpenseItems.map(item => ({ item, setter: setSharedExpenseItems, owner: 'shared' as const })),
+      ...user1PersonalExpenses.map(item => ({ item, setter: setUser1PersonalExpenses, owner: 'user1' as const })),
+      ...user2PersonalExpenses.map(item => ({ item, setter: setUser2PersonalExpenses, owner: 'user2' as const })),
+      ...sharedSavingsItems.map(item => ({ item, setter: setSharedSavingsItems, owner: 'shared' as const })),
+      ...sharedFunItems.map(item => ({ item, setter: setSharedFunItems, owner: 'shared' as const })),
+    ];
 
-    // Save all User 2 income items
-    for (const item of user2IncomeItems) {
+    // Save all items
+    for (const { item, setter, owner } of allItems) {
       try {
-        await saveItem(item, 'user2', setUser2IncomeItems);
+        await saveItem(item, owner, setter);
         savedCount++;
       } catch (error) {
-        console.error('Failed to save user2 item:', item, error);
+        console.error('Failed to save item:', item, error);
         errorCount++;
       }
     }
@@ -512,10 +516,11 @@ export default function BudgetPage() {
     console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
     
     if (errorCount > 0) {
-      alert(`Budget saved with ${errorCount} errors. Check console for details.`);
+      setSaveDialogMessage(`Budget saved with ${errorCount} errors. Check console for details.`);
     } else {
-      alert(`Budget saved successfully! ${savedCount} items saved.`);
+      setSaveDialogMessage(`Budget saved successfully! ${savedCount} items saved.`);
     }
+    setShowSaveDialog(true);
   };
 
   // Save handlers for each tab
@@ -694,6 +699,16 @@ export default function BudgetPage() {
 
         {/* Budget Form with Tabs */}
         <Card className="p-0 bg-white overflow-hidden">
+          {/* Save Budget Button */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <button
+              onClick={saveBudget}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+            >
+              Save Budget
+            </button>
+          </div>
+
           {/* Tab Navigation */}
           <div className="border-b border-gray-200">
             <div className="flex">
@@ -839,6 +854,17 @@ export default function BudgetPage() {
           </div>
         </Card>
       </div>
+
+      {/* Save Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showSaveDialog}
+        onClose={() => setShowSaveDialog(false)}
+        onConfirm={() => setShowSaveDialog(false)}
+        title="Budget Saved"
+        description={saveDialogMessage}
+        confirmText="OK"
+        variant="default"
+      />
     </div>
   );
 }

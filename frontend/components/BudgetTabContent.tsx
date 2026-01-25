@@ -93,7 +93,7 @@ export default function BudgetTabContent({
                     </select>
                     <input
                       type="number"
-                      value={item.amount}
+                      value={item.amount === 0 ? "" : item.amount}
                       onChange={(e) =>
                         column.onUpdateItem(
                           item.id,
