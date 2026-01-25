@@ -1,0 +1,231 @@
+PocketFlow repository structure (depth <= 5)
+
+PocketFlow/
+├── .github/ - GitHub workflows and Copilot instructions
+│   ├── copilot-instructions.md
+│   └── workflows/
+│       ├── README.md
+│       ├── ci.yml
+│       └── deploy.yml
+├── backend/ - FastAPI backend and services
+│   ├── .env
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── Dockerfile
+│   ├── pyproject.toml
+│   ├── requirements-dev.txt
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── ai/
+│   │   │   ├── __init__.py
+│   │   │   ├── agent.py
+│   │   │   ├── client.py
+│   │   │   ├── config.py
+│   │   │   ├── logging.py
+│   │   │   ├── schemas.py
+│   │   │   ├── system_prompt.txt
+│   │   │   └── tools.py
+│   │   ├── migrations/
+│   │   │   ├── __init__.py
+│   │   │   └── migrate_categories_to_objectid.py
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── admin.py
+│   │   │   ├── ai.py
+│   │   │   ├── auth.py
+│   │   │   ├── budget_line_items.py
+│   │   │   ├── budgets.py
+│   │   │   ├── categories.py
+│   │   │   ├── dashboard.py
+│   │   │   ├── database.py
+│   │   │   ├── goals.py
+│   │   │   └── transactions.py
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── budget_line_item_service.py
+│   │   │   ├── budget_service.py
+│   │   │   └── category_service.py
+│   │   ├── check_users.py
+│   │   ├── database.py
+│   │   ├── dependencies.py
+│   │   ├── fix_categories_timestamps.py
+│   │   ├── main.py
+│   │   ├── models.py
+│   │   ├── remove_duplicate_categories.py
+│   │   ├── security.py
+│   │   └── seed_data.py
+│   ├── check_users.py
+│   ├── debug_dashboard.py
+│   ├── seed_dashboard_data.py
+│   └── tests/
+│       ├── __init__.py
+│       ├── conftest.py
+│       ├── test_api.py
+│       ├── test_budget_api.py
+│       ├── test_budget_line_item_api.py
+│       ├── test_budget_line_item_service.py
+│       ├── test_budget_service.py
+│       ├── test_category_api.py
+│       └── test_category_service.py
+├── docs/ - Project documentation and API guides
+│   ├── ARCHITECTURE_DIAGRAM.md
+│   ├── AUTHENTICATION.md
+│   ├── BUDGET_API.md
+│   ├── BUDGET_LINE_ITEMS_API.md
+│   ├── BUDGET_LINE_ITEMS_CHECKLIST.md
+│   ├── BUDGET_LINE_ITEMS_IMPLEMENTATION.md
+│   ├── BUDGET_LINE_ITEMS_QUICK_REFERENCE.md
+│   ├── CATEGORIES_CRUD.md
+│   ├── CATEGORY_API.md
+│   ├── CATEGORY_IMPLEMENTATION.md
+│   ├── CATEGORY_QUICK_REF.md
+│   ├── COMPLETION_CERTIFICATE.md
+│   ├── DATABASE_PAGE_TESTING.md
+│   ├── DATABASE_SCHEMA.md
+│   ├── FUN_CATEGORY.md
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── MODELS_AND_SCHEMA_SUMMARY.md
+│   ├── MONGODB_QUERIES.md
+│   ├── README.md
+│   └── REUSABLE_COMPONENTS.md
+├── frontend/ - Next.js frontend application
+│   ├── .eslintrc.json
+│   ├── .gitignore
+│   ├── components.json
+│   ├── next-env.d.ts
+│   ├── next.config.mjs
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.mjs
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   ├── app/
+│   │   ├── account/
+│   │   │   └── page.tsx
+│   │   ├── analytics/
+│   │   │   └── page.tsx
+│   │   ├── budget/
+│   │   │   └── page.tsx
+│   │   ├── database/
+│   │   │   └── page.tsx
+│   │   ├── goals/
+│   │   │   └── page.tsx
+│   │   ├── login/
+│   │   │   └── page.tsx
+│   │   ├── transactions/
+│   │   │   └── page.tsx
+│   │   ├── wallets/
+│   │   │   └── page.tsx
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── ui/
+│   │   │   ├── button.tsx
+│   │   │   ├── card.tsx
+│   │   │   ├── dialog.tsx
+│   │   │   ├── input.tsx
+│   │   │   ├── label.tsx
+│   │   │   ├── scroll-area.tsx
+│   │   │   └── textarea.tsx
+│   │   ├── AIChat.tsx
+│   │   ├── BudgetTabContent.tsx
+│   │   ├── ConditionalSidebar.tsx
+│   │   ├── ConfirmationDialog.tsx
+│   │   ├── ExpenseBreakdown.tsx
+│   │   ├── GoalItemsInput.tsx
+│   │   ├── Header.tsx
+│   │   ├── KPICard.tsx
+│   │   ├── LifetimeSavingsChart.tsx
+│   │   ├── ProfileDropdown.tsx
+│   │   ├── Sidebar.tsx
+│   │   ├── StatCard.tsx
+│   │   └── Tabs.tsx
+│   ├── contexts/
+│   │   └── AuthContext.tsx
+│   └── lib/
+│       ├── admin-api.ts
+│       ├── ai-api.ts
+│       ├── api.ts
+│       ├── auth-api.ts
+│       ├── budget-line-items-api.ts
+│       ├── budgets-api.ts
+│       ├── categories-api.ts
+│       ├── dashboard-api.ts
+│       ├── transactions-api.ts
+│       └── utils.ts
+├── add_fun_categories.py
+├── docker-compose.yml
+├── package-lock.json
+├── package.json
+├── README.md
+└── .gitignore
+
+API endpoints (from backend/app/routes and backend/app/main.py)
+
+Core
+- GET /
+- GET /health
+
+Auth (prefix /auth)
+- POST /auth/register
+- POST /auth/login
+- POST /auth/logout
+- GET /auth/me
+- PATCH /auth/me
+
+Categories (prefix /api/categories)
+- POST /api/categories/
+- GET /api/categories/
+- GET /api/categories/{category_id}
+- PUT /api/categories/{category_id}
+- DELETE /api/categories/{category_id}
+
+Budgets (prefix /api/budgets)
+- POST /api/budgets/
+- GET /api/budgets/
+- GET /api/budgets/{budget_id}
+- GET /api/budgets/by-month/{month}
+- PUT /api/budgets/{budget_id}
+- DELETE /api/budgets/{budget_id}
+
+Budget Line Items (prefix /api/budget-line-items)
+- POST /api/budget-line-items/
+- GET /api/budget-line-items/
+- GET /api/budget-line-items/{line_item_id}
+- GET /api/budget-line-items/budget/{budget_id}
+- PUT /api/budget-line-items/{line_item_id}
+- DELETE /api/budget-line-items/{line_item_id}
+
+Goals (prefix /api/goals)
+- POST /api/goals
+- GET /api/goals
+- PUT /api/goals/reorder
+- PUT /api/goals/{goal_id}
+- DELETE /api/goals/{goal_id}
+
+Transactions (prefix /api/transactions)
+- GET /api/transactions
+- POST /api/transactions
+- DELETE /api/transactions/{transaction_id}
+
+Dashboard (prefix /api/dashboard)
+- GET /api/dashboard/stats
+- GET /api/dashboard/balance-trends
+- GET /api/dashboard/expense-breakdown
+
+Database (prefix /api/database)
+- GET /api/database/collections
+- GET /api/database/{collection_name}
+- GET /api/database/{collection_name}/count
+
+AI (prefix /api/ai)
+- POST /api/ai/chat
+
+Admin (prefix /api/admin)
+- DELETE /api/admin/clear-transactions
+- DELETE /api/admin/clear-budgets
+- DELETE /api/admin/clear-categories
+- DELETE /api/admin/clear-goals
+- DELETE /api/admin/clear-all
