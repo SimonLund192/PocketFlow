@@ -17,4 +17,17 @@ export const transactionsApi = {
     }
     return response.json();
   },
+  create: async (payload: Omit<Transaction, "id">): Promise<Transaction> => {
+    const response = await fetch(`${API_BASE_URL}/transactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to create transaction");
+    }
+
+    return response.json();
+  },
 };
