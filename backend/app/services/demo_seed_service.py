@@ -33,6 +33,40 @@ TYPE_MAP = {
     "fun": "fun",
 }
 
+# Default emoji icon + hex color for demo categories, keyed by (name, type).
+# Falls back to ("📦", "#6366f1") for categories not listed here.
+DEMO_CATEGORY_STYLE: dict[str, tuple[str, str]] = {
+    # Income
+    "Salary": ("💰", "#22c55e"),
+    "SU": ("🎓", "#3b82f6"),
+    "Freelance": ("💻", "#6366f1"),
+    # Expenses
+    "Rent": ("🏠", "#ef4444"),
+    "Groceries": ("🛒", "#f97316"),
+    "Utilities": ("💡", "#eab308"),
+    "Insurance": ("🛡️", "#3b82f6"),
+    "Streaming": ("📺", "#a855f7"),
+    "Phone & Internet": ("📱", "#14b8a6"),
+    "Car": ("🚗", "#6366f1"),
+    "Gas": ("⛽", "#f43f5e"),
+    "Health & Fitness": ("🏋️", "#22c55e"),
+    "Clothing": ("👕", "#ec4899"),
+    "Subscriptions": ("📦", "#06b6d4"),
+    "Public Transport": ("🌍", "#84cc16"),
+    # Savings
+    "Vacation": ("✈️", "#3b82f6"),
+    "Emergency Fund": ("🛡️", "#ef4444"),
+    "House Fund": ("🏠", "#22c55e"),
+    "Investments": ("📈", "#6366f1"),
+    # Fun
+    "Dining Out": ("🍽️", "#f97316"),
+    "Gaming": ("🎮", "#a855f7"),
+    "Shopping": ("🛍️", "#ec4899"),
+    "Travel": ("✈️", "#3b82f6"),
+    "Hobbies": ("🎨", "#eab308"),
+    "Gifts": ("🎁", "#ef4444"),
+}
+
 
 async def seed_demo_data(user_id: str) -> dict:
     """
@@ -83,12 +117,13 @@ async def seed_demo_data(user_id: str) -> dict:
         if (cat_name, cat_type) in existing_map:
             continue
         now = datetime.now(timezone.utc)
+        icon, color = DEMO_CATEGORY_STYLE.get(cat_name, ("📦", "#6366f1"))
         result = await categories_collection.insert_one({
             "user_id": user_id,
             "name": cat_name,
             "type": cat_type,
-            "icon": None,
-            "color": None,
+            "icon": icon,
+            "color": color,
             "created_at": now,
             "updated_at": now,
         })

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, Shield, Play, Apple, GripVertical, Pencil, Trash2, DollarSign, Minus, Gamepad2, Receipt, Lightbulb, Heart, Loader2, PiggyBank, Landmark } from "lucide-react";
+import { CheckCircle2, Shield, Play, Apple, GripVertical, Pencil, Trash2, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
@@ -10,6 +10,8 @@ import { categoriesApi, Category } from "@/lib/categories-api";
 import { adminApi } from "@/lib/admin-api";
 import { authApi } from "@/lib/auth-api";
 import { useAuth } from "@/contexts/AuthContext";
+import { isEmojiIcon, isHexColor, getIconComponent, getColorClass } from "@/lib/category-utils";
+import CategoryFormFields, { CategoryFormValues } from "@/components/CategoryFormFields";
 
 interface EditingCategory {
   id: string;
@@ -53,21 +55,6 @@ export default function Settings() {
     }
   }, [activeTab, isTabInitialized]);
   
-  // Helper to get color class
-  const getColorClass = (color: string) => {
-    const colorMap: Record<string, string> = {
-      blue: "bg-blue-500",
-      pink: "bg-pink-500",
-      red: "bg-red-500",
-      yellow: "bg-yellow-500",
-      green: "bg-green-500",
-      purple: "bg-purple-500",
-      orange: "bg-orange-500",
-      indigo: "bg-indigo-500",
-    };
-    return colorMap[color] || "bg-gray-500";
-  };
-  
   // Profile tab state
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -84,11 +71,15 @@ export default function Settings() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [editingCategory, setEditingCategory] = useState<EditingCategory | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryType, setNewCategoryType] = useState("");
-  const [newCategoryIcon, setNewCategoryIcon] = useState("");
-  const [newCategoryColor, setNewCategoryColor] = useState("");
+  const [newCategoryForm, setNewCategoryForm] = useState<CategoryFormValues>({
+    name: "",
+    type: "expense",
+    icon: "💰",
+    color: "#3b82f6",
+  });
   const [creatingCategory, setCreatingCategory] = useState(false);
+  const [seedingCategories, setSeedingCategories] = useState(false);
+  const [seedMessage, setSeedMessage] = useState<string | null>(null);
 
   // Admin tab state
   const [adminLoading, setAdminLoading] = useState(false);
@@ -150,7 +141,7 @@ export default function Settings() {
   };
 
   const handleCreateCategory = async () => {
-    if (!newCategoryName || !newCategoryType || !newCategoryIcon || !newCategoryColor) {
+    if (!newCategoryForm.name || !newCategoryForm.type || !newCategoryForm.icon || !newCategoryForm.color) {
       setCategoriesError("Please fill in all fields");
       return;
     }
@@ -160,17 +151,19 @@ export default function Settings() {
       setCategoriesError(null);
       setEditingCategory(null); // Clear any editing state
       const newCategory = await categoriesApi.create({
-        name: newCategoryName,
-        type: newCategoryType as Category["type"],
-        icon: newCategoryIcon,
-        color: newCategoryColor,
+        name: newCategoryForm.name,
+        type: newCategoryForm.type,
+        icon: newCategoryForm.icon,
+        color: newCategoryForm.color,
       });
       setCategories([...categories, newCategory]);
       // Reset form
-      setNewCategoryName("");
-      setNewCategoryType("");
-      setNewCategoryIcon("");
-      setNewCategoryColor("");
+      setNewCategoryForm({
+        name: "",
+        type: "expense",
+        icon: "💰",
+        color: "#3b82f6",
+      });
     } catch (error) {
       setCategoriesError(error instanceof Error ? error.message : "Failed to create category");
     } finally {
@@ -222,6 +215,22 @@ export default function Settings() {
 
   const handleCancelEdit = () => {
     setEditingCategory(null);
+  };
+
+  const handleSeedDefaults = async () => {
+    try {
+      setSeedingCategories(true);
+      setSeedMessage(null);
+      setCategoriesError(null);
+      const result = await categoriesApi.seedDefaults();
+      setSeedMessage(result.message);
+      // Reload categories to show the newly seeded ones
+      await loadCategories();
+    } catch (error) {
+      setCategoriesError(error instanceof Error ? error.message : "Failed to seed default categories");
+    } finally {
+      setSeedingCategories(false);
+    }
   };
 
   // Admin handlers
@@ -296,6 +305,111 @@ export default function Settings() {
   const expenseCategories = categories.filter((c) => c.type === "expense");
   const savingsCategories = categories.filter((c) => c.type === "savings");
   const funCategories = categories.filter((c) => c.type === "fun");
+
+  /** Render a category icon badge (handles both emoji and legacy Lucide icons, hex and named colors) */
+  const renderCategoryBadge = (icon: string, color: string) => {
+    const useHex = isHexColor(color);
+    const useEmoji = isEmojiIcon(icon);
+    const bgClass = useHex ? "" : getColorClass(color);
+    const bgStyle = useHex ? { backgroundColor: color } : undefined;
+
+    if (useEmoji) {
+      return (
+        <div
+          className={`w-10 h-10 ${bgClass} rounded-full flex items-center justify-center flex-shrink-0`}
+          style={bgStyle}
+        >
+          <span className="text-lg leading-none">{icon}</span>
+        </div>
+      );
+    }
+
+    const IconComp = getIconComponent(icon);
+    return (
+      <div
+        className={`w-10 h-10 ${bgClass} rounded-full flex items-center justify-center text-white flex-shrink-0`}
+        style={bgStyle}
+      >
+        <IconComp className="w-5 h-5" />
+      </div>
+    );
+  };
+
+  /** Render a category list section (used for income, expense, savings, fun) */
+  const renderCategorySection = (title: string, categoryList: Category[], emptyLabel: string) => (
+    <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
+      <h2 className="text-xl font-bold text-gray-900 mb-6">{title}</h2>
+      <div className="space-y-3">
+        {categoryList.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="text-sm">No {emptyLabel} categories yet.</p>
+            <p className="text-xs mt-1">Create one to get started!</p>
+          </div>
+        ) : (
+          categoryList.map((category) => {
+            const isEditing =
+              editingCategory?.id === category.id && editingCategory?.name !== undefined;
+
+            if (isEditing) {
+              return (
+                <div
+                  key={category.id}
+                  className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
+                >
+                  <GripVertical className="w-5 h-5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={editingCategory?.name || ""}
+                    onChange={(e) =>
+                      setEditingCategory(
+                        editingCategory ? { ...editingCategory, name: e.target.value } : null
+                      )
+                    }
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={category.id}
+                className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                <GripVertical className="w-5 h-5 text-gray-400" />
+                {renderCategoryBadge(category.icon, category.color)}
+                <span className="flex-1 text-gray-900 font-medium">{category.name}</span>
+                <button
+                  onClick={() => handleStartEdit(category)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-4 h-4 text-blue-600" />
+                </button>
+                <button
+                  onClick={() => handleDeleteCategory(category.id)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Card>
+  );
 
   const tabs = [
     "Account",
@@ -645,134 +759,44 @@ export default function Settings() {
             {/* Left Column - Create Category Form */}
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl h-fit">
               <h2 className="text-xl font-bold text-gray-900 mb-6">
-                Create a new categories
+                Create a new category
               </h2>
 
-              {/* Name Input */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-blue-600 mb-3">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="category name"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-gray-400"
-                />
-              </div>
-
-              {/* Type Select */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-blue-600 mb-3">
-                  Type
-                </label>
-                <select
-                  value={newCategoryType}
-                  onChange={(e) => setNewCategoryType(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: "no-repeat",
-                    backgroundPosition: "right 1rem center",
-                  }}
-                >
-                  <option value="" className="text-gray-400">Choose a budget type...</option>
-                  <option value="income" className="text-gray-900">💰 Income</option>
-                  <option value="expense" className="text-gray-900">💸 Expense</option>
-                  <option value="savings" className="text-gray-900">🏦 Savings</option>
-                  <option value="fun" className="text-gray-900">🎉 Fun</option>
-                </select>
-              </div>
-
-              {/* Icon and Color Row */}
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                {/* Icon Select */}
-                <div>
-                  <label className="block text-sm font-semibold text-blue-600 mb-3">
-                    Icon
-                  </label>
-                  <select
-                    value={newCategoryIcon}
-                    onChange={(e) => setNewCategoryIcon(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "right 1rem center",
-                    }}
-                  >
-                    <option value="" className="text-gray-400">Choose...</option>
-                    <option value="dollar" className="text-gray-900">💵 Dollar</option>
-                    <option value="moneybag" className="text-gray-900">💰 Money Bag</option>
-                    <option value="car" className="text-gray-900">🚗 Car</option>
-                    <option value="house" className="text-gray-900">🏠 House</option>
-                    <option value="gamepad" className="text-gray-900">🎮 Games</option>
-                    <option value="subscription" className="text-gray-900">📱 Subscription</option>
-                    <option value="horse" className="text-gray-900">🐴 Horse</option>
-                    <option value="receipt" className="text-gray-900">🧾 Receipt</option>
-                    <option value="cart" className="text-gray-900">🛒 Shopping</option>
-                    <option value="food" className="text-gray-900">🍔 Food</option>
-                    <option value="plane" className="text-gray-900">✈️ Travel</option>
-                    <option value="heart" className="text-gray-900">❤️ Health</option>
-                    <option value="book" className="text-gray-900">📚 Education</option>
-                    <option value="lightbulb" className="text-gray-900">💡 Utilities</option>
-                    <option value="gift" className="text-gray-900">🎁 Gift</option>
-                    <option value="coffee" className="text-gray-900">☕ Coffee</option>
-                    <option value="fitness" className="text-gray-900">💪 Fitness</option>
-                    <option value="pet" className="text-gray-900">🐾 Pet</option>
-                    <option value="music" className="text-gray-900">🎵 Music</option>
-                    <option value="piggy-bank" className="text-gray-900">🐷 Savings</option>
-                  </select>
-                </div>
-
-                {/* Color Select */}
-                <div>
-                  <label className="block text-sm font-semibold text-blue-600 mb-3">
-                    Color
-                  </label>
-                  <select
-                    value={newCategoryColor}
-                    onChange={(e) => setNewCategoryColor(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium appearance-none bg-white hover:border-gray-300 transition-colors cursor-pointer"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%234F46E5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                      backgroundRepeat: "no-repeat",
-                      backgroundPosition: "right 1rem center",
-                    }}
-                  >
-                    <option value="" className="text-gray-400">Choose...</option>
-                    <option value="blue" className="text-gray-900">🔵 Blue</option>
-                    <option value="pink" className="text-gray-900">🩷 Pink</option>
-                    <option value="red" className="text-gray-900">🔴 Red</option>
-                    <option value="yellow" className="text-gray-900">🟡 Yellow</option>
-                    <option value="green" className="text-gray-900">🟢 Green</option>
-                    <option value="purple" className="text-gray-900">🟣 Purple</option>
-                    <option value="orange" className="text-gray-900">🟠 Orange</option>
-                  </select>
-                </div>
-              </div>
+              <CategoryFormFields
+                values={newCategoryForm}
+                onChange={setNewCategoryForm}
+                error={categoriesError}
+              />
 
               {/* Create Button */}
-              {categoriesError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                  {categoriesError}
-                </div>
-              )}
-              <Button
-                onClick={handleCreateCategory}
-                disabled={creatingCategory}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {creatingCategory ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create new category"
+              <div className="mt-6 space-y-3">
+                <Button
+                  onClick={handleCreateCategory}
+                  disabled={creatingCategory}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-lg font-medium text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {creatingCategory ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create new category"
+                  )}
+                </Button>
+
+                {seedMessage && (
+                  <p className="text-xs text-green-600 font-medium text-center">{seedMessage}</p>
                 )}
-              </Button>
+
+                <button
+                  onClick={handleSeedDefaults}
+                  disabled={seedingCategories}
+                  className="w-full text-xs text-gray-500 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                >
+                  {seedingCategories ? "Restoring..." : "Restore default categories"}
+                </button>
+              </div>
             </Card>
 
             {/* Right Column - Category Lists */}
@@ -783,332 +807,10 @@ export default function Settings() {
                 </Card>
               ) : (
                 <>
-                  {/* Income Categories */}
-              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">
-                  Income Categories
-                </h2>
-
-                <div className="space-y-3">
-                  {incomeCategories.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No income categories yet.</p>
-                      <p className="text-xs mt-1">Create one to get started!</p>
-                    </div>
-                  ) : (
-                    incomeCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
-                    let IconComponent = DollarSign;
-                    if (category.icon === "minus") IconComponent = Minus;
-                    if (category.icon === "gamepad") IconComponent = Gamepad2;
-                    if (category.icon === "receipt") IconComponent = Receipt;
-                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
-                    if (category.icon === "heart") IconComponent = Heart;
-
-                    if (isEditing) {
-                      return (
-                        <div
-                          key={category.id}
-                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
-                        >
-                          <GripVertical className="w-5 h-5 text-gray-400" />
-                          <input
-                            type="text"
-                            value={editingCategory?.name || ''}
-                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <button
-                            onClick={handleSaveEdit}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={category.id}
-                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <GripVertical className="w-5 h-5 text-gray-400" />
-                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                          <IconComponent className="w-5 h-5" />
-                        </div>
-                        <span className="flex-1 text-gray-900 font-medium">
-                          {category.name}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(category)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Pencil className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    );
-                  })
-                  )}
-                </div>
-              </Card>
-
-              {/* Expense Categories */}
-              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">
-                  Expense Categories
-                </h2>
-
-                <div className="space-y-3">
-                  {expenseCategories.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No expense categories yet.</p>
-                      <p className="text-xs mt-1">Create one to get started!</p>
-                    </div>
-                  ) : (
-                    expenseCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
-                    let IconComponent = Minus;
-                    if (category.icon === "gamepad") IconComponent = Gamepad2;
-                    if (category.icon === "receipt") IconComponent = Receipt;
-                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
-                    if (category.icon === "heart") IconComponent = Heart;
-                    if (category.icon === "dollar") IconComponent = DollarSign;
-
-                    if (isEditing) {
-                      return (
-                        <div
-                          key={category.id}
-                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
-                        >
-                          <GripVertical className="w-5 h-5 text-gray-400" />
-                          <input
-                            type="text"
-                            value={editingCategory?.name || ''}
-                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <button
-                            onClick={handleSaveEdit}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={category.id}
-                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <GripVertical className="w-5 h-5 text-gray-400" />
-                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                          <IconComponent className="w-5 h-5" />
-                        </div>
-                        <span className="flex-1 text-gray-900 font-medium">
-                          {category.name}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(category)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Pencil className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    );
-                  })
-                  )}
-                </div>
-              </Card>
-
-              {/* Savings Categories */}
-              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">
-                  Savings Categories
-                </h2>
-
-                <div className="space-y-3">
-                  {savingsCategories.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No savings categories yet.</p>
-                      <p className="text-xs mt-1">Create one to get started!</p>
-                    </div>
-                  ) : (
-                    savingsCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
-                    let IconComponent = DollarSign;
-                    if (category.icon === "piggy-bank") IconComponent = PiggyBank;
-                    if (category.icon === "landmark") IconComponent = Landmark;
-                    if (category.icon === "heart") IconComponent = Heart;
-                    if (category.icon === "dollar") IconComponent = DollarSign;
-
-                    if (isEditing) {
-                      return (
-                        <div
-                          key={category.id}
-                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
-                        >
-                          <GripVertical className="w-5 h-5 text-gray-400" />
-                          <input
-                            type="text"
-                            value={editingCategory?.name || ''}
-                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <button
-                            onClick={handleSaveEdit}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={category.id}
-                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <GripVertical className="w-5 h-5 text-gray-400" />
-                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                          <IconComponent className="w-5 h-5" />
-                        </div>
-                        <span className="flex-1 text-gray-900 font-medium">
-                          {category.name}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(category)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Pencil className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    );
-                  })
-                  )}
-                </div>
-              </Card>
-
-              {/* Fun Categories */}
-              <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
-                <h2 className="text-xl font-bold text-gray-900 mb-6">
-                  Fun Categories
-                </h2>
-
-                <div className="space-y-3">
-                  {funCategories.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <p className="text-sm">No fun categories yet.</p>
-                      <p className="text-xs mt-1">Create one to get started!</p>
-                    </div>
-                  ) : (
-                    funCategories.map((category) => {
-                    const isEditing = editingCategory?.id === category.id && editingCategory?.name !== undefined;
-                    let IconComponent = Gamepad2;
-                    if (category.icon === "gamepad") IconComponent = Gamepad2;
-                    if (category.icon === "heart") IconComponent = Heart;
-                    if (category.icon === "lightbulb") IconComponent = Lightbulb;
-                    if (category.icon === "receipt") IconComponent = Receipt;
-                    if (category.icon === "dollar") IconComponent = DollarSign;
-
-                    if (isEditing) {
-                      return (
-                        <div
-                          key={category.id}
-                          className="flex items-center gap-4 p-3 bg-indigo-50 rounded-lg border-2 border-indigo-300"
-                        >
-                          <GripVertical className="w-5 h-5 text-gray-400" />
-                          <input
-                            type="text"
-                            value={editingCategory?.name || ''}
-                            onChange={(e) => setEditingCategory(editingCategory ? { ...editingCategory, name: e.target.value } : null)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <button
-                            onClick={handleSaveEdit}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm font-medium"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={category.id}
-                        className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <GripVertical className="w-5 h-5 text-gray-400" />
-                        <div className={`w-10 h-10 ${getColorClass(category.color)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                          <IconComponent className="w-5 h-5" />
-                        </div>
-                        <span className="flex-1 text-gray-900 font-medium">
-                          {category.name}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(category)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Pencil className="w-4 h-4 text-blue-600" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </button>
-                      </div>
-                    );
-                  })
-                  )}
-                </div>
-              </Card>
+                  {renderCategorySection("Income Categories", incomeCategories, "income")}
+                  {renderCategorySection("Expense Categories", expenseCategories, "expense")}
+                  {renderCategorySection("Savings Categories", savingsCategories, "savings")}
+                  {renderCategorySection("Fun Categories", funCategories, "fun")}
                 </>
               )}
             </div>
@@ -1159,6 +861,37 @@ export default function Settings() {
                 <p className="text-red-800 font-medium">{adminError}</p>
               </div>
             )}
+
+            {/* Clear All Transactions */}
+            <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-3">
+                Migrate Category Icons & Colors
+              </h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Converts legacy icon names (e.g. &quot;dollar&quot;) and color names (e.g. &quot;blue&quot;) to the new emoji + hex format (e.g. &quot;💰&quot; / &quot;#3b82f6&quot;). Safe to run multiple times — already-migrated categories are skipped.
+              </p>
+              <Button 
+                onClick={async () => {
+                  setAdminLoading(true);
+                  setAdminMessage("");
+                  setAdminError("");
+                  try {
+                    const result = await adminApi.migrateCategoryIcons();
+                    setAdminMessage(result.message);
+                    // Refresh categories to show updated icons
+                    await loadCategories();
+                  } catch (_err) {
+                    setAdminError("Failed to migrate category icons");
+                  } finally {
+                    setAdminLoading(false);
+                  }
+                }}
+                disabled={adminLoading}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {adminLoading ? "Migrating..." : "Migrate Icons & Colors"}
+              </Button>
+            </Card>
 
             {/* Clear All Transactions */}
             <Card className="p-8 bg-white border border-gray-200 rounded-lg mb-6">

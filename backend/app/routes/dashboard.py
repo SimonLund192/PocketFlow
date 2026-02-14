@@ -243,7 +243,8 @@ async def get_expense_breakdown(
         return []
         
     budget_id = budget["_id"]
-    category_totals = {}
+    category_totals: dict = {}
+    category_meta: dict = {}
     total_expenses = 0
     
     # Get budget line items
@@ -264,16 +265,25 @@ async def get_expense_breakdown(
         cat_name = category.get("name", "Unknown")
         
         category_totals[cat_name] = category_totals.get(cat_name, 0) + amount
+        # Store icon and color from the category document
+        if cat_name not in category_meta:
+            category_meta[cat_name] = {
+                "icon": category.get("icon", ""),
+                "color": category.get("color", ""),
+            }
         total_expenses += amount
     
     # Calculate percentages
     breakdown = []
     for category_name, amount in category_totals.items():
         percentage = (amount / total_expenses * 100) if total_expenses > 0 else 0
+        meta = category_meta.get(category_name, {})
         breakdown.append(ExpenseBreakdown(
             category=category_name,
             amount=amount,
-            percentage=round(percentage, 1)
+            percentage=round(percentage, 1),
+            icon=meta.get("icon", ""),
+            color=meta.get("color", ""),
         ))
     
     return sorted(breakdown, key=lambda x: x.amount, reverse=True)

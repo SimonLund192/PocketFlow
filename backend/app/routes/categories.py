@@ -3,6 +3,7 @@ from typing import List, Optional
 from app.models import CategoryCreate, CategoryUpdate, CategoryResponse
 from app.dependencies import get_current_user_id
 from app.services.category_service import CategoryService
+from app.services.default_categories import seed_default_categories, DEFAULT_CATEGORIES
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
 
@@ -136,3 +137,20 @@ async def delete_category(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
+
+@router.post("/seed-defaults")
+async def seed_defaults(user_id: str = Depends(get_current_user_id)):
+    """
+    Re-seed the default categories for the current user.
+
+    Categories that already exist (same name + type) are skipped,
+    so this is safe to call multiple times.
+    """
+    inserted = await seed_default_categories(user_id)
+    skipped = len(DEFAULT_CATEGORIES) - inserted
+    return {
+        "message": f"Seeded {inserted} default categories ({skipped} already existed)",
+        "inserted": inserted,
+        "skipped": skipped,
+    }

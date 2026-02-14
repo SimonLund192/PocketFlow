@@ -2,25 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
-import { Home, Car, Shield, Globe, Smartphone, ShoppingBag, Zap, Coffee, CreditCard } from "lucide-react";
 import { getExpenseBreakdown, ExpenseBreakdown as ExpenseBreakdownType } from "@/lib/dashboard-api";
 import { useMonth } from "@/contexts/MonthContext";
-
-// Helper to map category names to colors/icons
-const getCategoryStyle = (categoryName: string) => {
-  const normalized = categoryName.toLowerCase();
-  
-  if (normalized.includes("rent") || normalized.includes("housing")) return { color: "bg-purple-500", icon: Home };
-  if (normalized.includes("car") || normalized.includes("transport")) return { color: "bg-red-500", icon: Car };
-  if (normalized.includes("insurance")) return { color: "bg-yellow-500", icon: Shield };
-  if (normalized.includes("web") || normalized.includes("internet")) return { color: "bg-blue-500", icon: Globe };
-  if (normalized.includes("phone") || normalized.includes("mobile")) return { color: "bg-pink-500", icon: Smartphone };
-  if (normalized.includes("grocer") || normalized.includes("food")) return { color: "bg-green-500", icon: ShoppingBag };
-  if (normalized.includes("util")) return { color: "bg-orange-500", icon: Zap };
-  if (normalized.includes("fun") || normalized.includes("entertainment")) return { color: "bg-indigo-500", icon: Coffee };
-  
-  return { color: "bg-gray-500", icon: CreditCard };
-};
+import { isEmojiIcon, isHexColor, getIconComponent, getColorClass } from "@/lib/category-utils";
 
 export default function ExpenseBreakdown() {
   const { selectedMonth } = useMonth();
@@ -85,12 +69,16 @@ export default function ExpenseBreakdown() {
       {/* Percentage Bar */}
       <div className="flex h-3 rounded-full overflow-hidden mb-6 bg-gray-100">
         {data.map((item, index) => {
-           const style = getCategoryStyle(item.category);
+           const colorCls = getColorClass(item.color);
+           const useHex = isHexColor(item.color);
            return (
             <div
               key={index}
-              className={`${style.color}`}
-              style={{ width: `${item.percentage}%` }}
+              className={useHex ? "" : colorCls}
+              style={{
+                width: `${item.percentage}%`,
+                ...(useHex ? { backgroundColor: item.color } : {}),
+              }}
               title={`${item.category}: ${item.percentage}%`}
             />
            );
@@ -100,13 +88,22 @@ export default function ExpenseBreakdown() {
       {/* Expense List */}
       <div className="space-y-4">
         {data.map((item, index) => {
-          const style = getCategoryStyle(item.category);
-          const Icon = style.icon;
+          const emoji = isEmojiIcon(item.icon);
+          const hexColor = isHexColor(item.color);
+          const colorCls = hexColor ? "" : getColorClass(item.color);
+          const Icon = emoji ? null : getIconComponent(item.icon);
           return (
             <div key={index} className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full ${style.color} flex items-center justify-center shrink-0`}>
-                  <Icon className="w-4 h-4 text-white" />
+                <div
+                  className={`w-8 h-8 rounded-full ${colorCls} flex items-center justify-center shrink-0`}
+                  style={hexColor ? { backgroundColor: item.color } : undefined}
+                >
+                  {emoji ? (
+                    <span className="text-base leading-none">{item.icon}</span>
+                  ) : Icon ? (
+                    <Icon className="w-4 h-4 text-white" />
+                  ) : null}
                 </div>
                 <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">
                   {item.category}

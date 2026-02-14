@@ -20,6 +20,8 @@ export interface ExpenseBreakdown {
   category: string;
   amount: number;
   percentage: number;
+  icon: string;
+  color: string;
 }
 
 /**
