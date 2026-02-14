@@ -8,19 +8,22 @@ import Header from "@/components/Header";
 import AIChat from "@/components/AIChat";
 import { getDashboardStats, DashboardStats } from "@/lib/dashboard-api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMonth } from "@/contexts/MonthContext";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { selectedMonth } = useMonth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardStats();
-  }, []);
+  }, [selectedMonth]);
 
   const loadDashboardStats = async () => {
     try {
-      const data = await getDashboardStats();
+      setLoading(true);
+      const data = await getDashboardStats(selectedMonth);
       setStats(data);
     } catch (error) {
       console.error("Error loading dashboard stats:", error);

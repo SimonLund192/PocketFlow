@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Home, Car, Shield, Globe, Smartphone, ShoppingBag, Zap, Coffee, CreditCard } from "lucide-react";
 import { getExpenseBreakdown, ExpenseBreakdown as ExpenseBreakdownType } from "@/lib/dashboard-api";
+import { useMonth } from "@/contexts/MonthContext";
 
 // Helper to map category names to colors/icons
 const getCategoryStyle = (categoryName: string) => {
@@ -22,13 +23,15 @@ const getCategoryStyle = (categoryName: string) => {
 };
 
 export default function ExpenseBreakdown() {
+  const { selectedMonth } = useMonth();
   const [data, setData] = useState<ExpenseBreakdownType[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const breakdown = await getExpenseBreakdown();
+        setLoading(true);
+        const breakdown = await getExpenseBreakdown(selectedMonth);
         setData(breakdown);
       } catch (error) {
         console.error("Failed to load expense breakdown:", error);
@@ -37,7 +40,7 @@ export default function ExpenseBreakdown() {
       }
     }
     loadData();
-  }, []);
+  }, [selectedMonth]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('da-DK', {

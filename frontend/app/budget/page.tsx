@@ -19,6 +19,7 @@ import {
 } from "@/lib/budget-line-items-api";
 import { authApi } from "@/lib/auth-api";
 import QuickCategoryDialog from "@/components/QuickCategoryDialog";
+import { useMonth } from "@/contexts/MonthContext";
 
 interface BudgetItem {
   id: string;
@@ -62,13 +63,8 @@ function StatCard({ title, value, subtitle, trend }: StatCardProps) {
 }
 
 export default function BudgetPage() {
-  // Get current month in YYYY-MM format
-  const getCurrentMonth = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  };
+  const { selectedMonth } = useMonth();
 
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
   const [activeTab, setActiveTab] = useState<TabType>("income");
   const [user1Name, setUser1Name] = useState("Simon Lund");
   const [user2Name, setUser2Name] = useState("User 2");
@@ -666,14 +662,6 @@ export default function BudgetPage() {
         title="Budget" 
         subtitle="Plan and manage your monthly budget across all categories." 
         breadcrumb={["Dashboard", "Budget"]}
-        action={
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        }
       />
 
       {/* Main Content */}

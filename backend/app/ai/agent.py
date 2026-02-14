@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 import json
 from datetime import datetime
 from pathlib import Path
+from bson import ObjectId
 from .client import LLMClient
 from .tools import tools_registry, get_tool_definitions, execute_save_budget_entries
 from .schemas import (
@@ -9,6 +10,7 @@ from .schemas import (
     PendingAction, ProposedEntry,
 )
 from .logging import ai_logger
+from app.database import database
 
 MAX_TOOL_ITERATIONS = 10  # Safety limit for the ReAct loop
 
@@ -19,8 +21,8 @@ class AIAgent:
         self.available_tools = get_tool_definitions()
         self.system_prompt_path = Path(__file__).parent / "system_prompt.txt"
 
-    def _load_system_prompt(self) -> str:
-        """Load and format the system prompt with current date context"""
+    async def _load_system_prompt(self, user_id: str = "") -> str:
+        """Load and format the system prompt with current date context and user names"""
         try:
             with open(self.system_prompt_path, 'r') as f:
                 prompt_template = f.read()
@@ -28,9 +30,24 @@ class AIAgent:
             current_date = datetime.now().strftime("%B %d, %Y")
             current_month = datetime.now().strftime("%Y-%m")
 
+            # Look up user names from the database
+            user1_name = "User 1"
+            user2_name = "Partner"
+            if user_id and user_id != "test_user":
+                try:
+                    users_collection = database["users"]
+                    user_doc = await users_collection.find_one({"_id": ObjectId(user_id)})
+                    if user_doc:
+                        user1_name = user_doc.get("full_name") or user1_name
+                        user2_name = user_doc.get("partner_name") or user2_name
+                except Exception as e:
+                    ai_logger.warning(f"Could not look up user names: {e}")
+
             return prompt_template.format(
                 current_date=current_date,
-                current_month=current_month
+                current_month=current_month,
+                user1_name=user1_name,
+                user2_name=user2_name,
             )
         except Exception as e:
             ai_logger.error(f"Error loading system prompt: {e}")
@@ -53,7 +70,7 @@ class AIAgent:
         if not messages or messages[0].get("role") != "system":
             system_message = {
                 "role": "system",
-                "content": self._load_system_prompt()
+                "content": await self._load_system_prompt(user_id)
             }
             messages.insert(0, system_message)
 

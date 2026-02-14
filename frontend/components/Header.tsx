@@ -1,8 +1,9 @@
 "use client";
 
-import { Moon, Bell, Search } from "lucide-react";
+import { Moon, Bell, Search, Calendar } from "lucide-react";
 import ProfileDropdown from "./ProfileDropdown";
 import { useAuth } from "@/contexts/AuthContext";
+import { useMonth } from "@/contexts/MonthContext";
 
 interface HeaderProps {
   title: string;
@@ -13,6 +14,7 @@ interface HeaderProps {
 
 export default function Header({ title, subtitle, breadcrumb, action }: HeaderProps) {
   const { user } = useAuth();
+  const { selectedMonth, setSelectedMonth, monthLabel } = useMonth();
   
   // Get user initials
   const getInitials = (name: string) => {
@@ -39,6 +41,15 @@ export default function Header({ title, subtitle, breadcrumb, action }: HeaderPr
         </div>
         <div className="flex items-center gap-4">
           {action && <div className="mr-4">{action}</div>}
+          <div className="flex items-center gap-2 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <Calendar className="w-4 h-4 text-indigo-600" />
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent text-sm font-medium text-indigo-700 focus:outline-none cursor-pointer"
+            />
+          </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input

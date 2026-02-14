@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ConditionalSidebar from "@/components/ConditionalSidebar";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { MonthProvider } from "@/contexts/MonthContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,12 +21,14 @@ export default function RootLayout({
     <html lang="en" className="h-full">
       <body className={`${inter.className} h-full m-0 p-0`}>
         <AuthProvider>
-          <div className="flex h-full bg-gray-50">
-            <ConditionalSidebar />
-            <main className="flex-1 overflow-y-scroll">
-              {children}
-            </main>
-          </div>
+          <MonthProvider>
+            <div className="flex h-full bg-gray-50">
+              <ConditionalSidebar />
+              <main className="flex-1 overflow-y-scroll">
+                {children}
+              </main>
+            </div>
+          </MonthProvider>
         </AuthProvider>
       </body>
     </html>

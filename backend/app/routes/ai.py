@@ -143,11 +143,15 @@ async def upload_csv(
         if not csv_text.strip():
             raise HTTPException(status_code=400, detail="Empty CSV file")
 
+        # Determine the current month for the prompt
+        from datetime import datetime
+        current_month = datetime.now().strftime("%Y-%m")
+
         # Create a chat request that includes the CSV data
         # The AI agent will use parse_csv_data + get_user_categories + propose_budget_entries
         csv_message = (
             f"I've uploaded a CSV bank statement. Please parse it, categorize each transaction "
-            f"into my existing budget categories, and propose budget entries for this month ({ai_agent._load_system_prompt().split('Current month: ')[-1][:7] if 'Current month:' in ai_agent._load_system_prompt() else 'current month'}).\n\n"
+            f"into my existing budget categories, and propose budget entries for {current_month}.\n\n"
             f"Here is the CSV data:\n```\n{csv_text}\n```"
         )
 

@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from typing import List
+from fastapi import APIRouter, Depends, Query
+from typing import List, Optional
 from app.models import DashboardStats, BalanceTrend, ExpenseBreakdown
 from app.database import transactions_collection, goals_collection, budget_line_items_collection, categories_collection, budgets_collection
 from app.dependencies import get_current_user_id
@@ -10,14 +10,17 @@ router = APIRouter()
 
 
 @router.get("/stats", response_model=DashboardStats)
-async def get_dashboard_stats(user_id: str = Depends(get_current_user_id)):
-    """Get dashboard statistics - calculates from specific budget (current month)"""
-    # Get current month in YYYY-MM format
-    current_month_str = datetime.now().strftime("%Y-%m")
+async def get_dashboard_stats(
+    user_id: str = Depends(get_current_user_id),
+    month: Optional[str] = Query(None, description="Month in YYYY-MM format. Defaults to current month.")
+):
+    """Get dashboard statistics - calculates from a specific budget month"""
+    # Use provided month or default to current month
+    month_str = month if month else datetime.now().strftime("%Y-%m")
     
-    # Try to find budget for current month first
+    # Try to find budget for the specified month
     budget = await budgets_collection.find_one({
-        "month": current_month_str,
+        "month": month_str,
         "user_id": user_id
     })
     
@@ -220,16 +223,19 @@ async def get_balance_trends(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/expense-breakdown", response_model=List[ExpenseBreakdown])
-async def get_expense_breakdown(user_id: str = Depends(get_current_user_id)):
+async def get_expense_breakdown(
+    user_id: str = Depends(get_current_user_id),
+    month: Optional[str] = Query(None, description="Month in YYYY-MM format. Defaults to current month.")
+):
     """
-    Get expense breakdown by category for the current user's current month budget.
+    Get expense breakdown by category for the current user's budget month.
     Only includes items where category type is 'expense' (Shared + Personal).
     """
-    current_month_str = datetime.now().strftime("%Y-%m")
+    month_str = month if month else datetime.now().strftime("%Y-%m")
     
-    # Try to find budget for current month first
+    # Try to find budget for the specified month
     budget = await budgets_collection.find_one({
-        "month": current_month_str,
+        "month": month_str,
         "user_id": user_id
     })
     
