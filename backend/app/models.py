@@ -67,6 +67,8 @@ class ExpenseBreakdown(BaseModel):
     category: str
     amount: float
     percentage: float
+    icon: str = ""
+    color: str = ""
 
 
 # ============================================================================

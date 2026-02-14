@@ -32,7 +32,9 @@ async def get_current_user_id(current_user_email: str = Depends(get_current_user
         User_ID (string representation of MongoDB _id)
     """
     users_collection = database["users"]
-    user = await users_collection.find_one({"email": current_user_email})
+    # Normalize email to lowercase for case-insensitive lookup
+    normalized_email = current_user_email.strip().lower()
+    user = await users_collection.find_one({"email": normalized_email})
     
     if not user:
         raise HTTPException(

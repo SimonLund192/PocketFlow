@@ -1,11 +1,74 @@
 """
 Admin routes for database management
 """
+import logging
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from app.dependencies import get_current_user_id
 from app.database import database
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+# ============================================================================
+# Legacy → emoji/hex migration maps (mirrors frontend category-utils.ts)
+# ============================================================================
+
+LEGACY_ICON_TO_EMOJI: dict[str, str] = {
+    "dollar": "💰",
+    "moneybag": "💰",
+    "minus": "💰",
+    "car": "🚗",
+    "house": "🏠",
+    "gamepad": "🎮",
+    "subscription": "📱",
+    "horse": "🐾",
+    "receipt": "🛒",
+    "cart": "🛒",
+    "food": "🍽️",
+    "plane": "✈️",
+    "heart": "❤️",
+    "book": "🎓",
+    "lightbulb": "💡",
+    "gift": "🎁",
+    "coffee": "☕",
+    "fitness": "🏋️",
+    "pet": "🐾",
+    "music": "🎵",
+    "piggy-bank": "💰",
+    "landmark": "🏠",
+    "shield": "🛡️",
+    "globe": "🌍",
+    "zap": "⚡",
+}
+
+LEGACY_COLOR_TO_HEX: dict[str, str] = {
+    "blue": "#3b82f6",
+    "pink": "#ec4899",
+    "red": "#ef4444",
+    "yellow": "#eab308",
+    "green": "#22c55e",
+    "purple": "#a855f7",
+    "orange": "#f97316",
+    "indigo": "#6366f1",
+}
+
+_LEGACY_KEY_RE = re.compile(r"^[a-z0-9-]+$")
+
+
+def _is_legacy_icon(icon: str | None) -> bool:
+    """True if the icon is a short ASCII key like 'dollar', not an emoji."""
+    if not icon:
+        return False
+    return bool(_LEGACY_KEY_RE.match(icon))
+
+
+def _is_legacy_color(color: str | None) -> bool:
+    """True if the color is a name like 'blue', not a '#hex' string."""
+    if not color:
+        return False
+    return not color.startswith("#")
 
 
 @router.delete("/clear-transactions")
@@ -104,3 +167,72 @@ async def clear_all_data(user_id: str = Depends(get_current_user_id)):
         "goals_deleted": goals_result.deleted_count,
         "total_deleted": total_deleted
     }
+
+
+@router.post("/migrate-category-icons")
+async def migrate_category_icons(user_id: str = Depends(get_current_user_id)):
+    """
+    Migrate all legacy icon/color values to emoji + hex format for the current user.
+
+    Legacy icons are short ASCII keys like "dollar", "car".
+    Legacy colors are named strings like "blue", "red".
+
+    After migration they become emoji strings ("💰", "🚗") and hex codes ("#3b82f6", "#ef4444").
+
+    Categories that already use the new format or have no icon/color are skipped.
+    """
+    categories_collection = database["categories"]
+
+    cursor = categories_collection.find({"user_id": user_id})
+    updated = 0
+    skipped = 0
+    unmapped_icons: list[str] = []
+    unmapped_colors: list[str] = []
+
+    async for cat in cursor:
+        icon = cat.get("icon") or ""
+        color = cat.get("color") or ""
+        updates: dict[str, str] = {}
+
+        # Migrate icon
+        if _is_legacy_icon(icon):
+            new_icon = LEGACY_ICON_TO_EMOJI.get(icon)
+            if new_icon:
+                updates["icon"] = new_icon
+            else:
+                unmapped_icons.append(icon)
+
+        # Migrate color
+        if _is_legacy_color(color):
+            new_color = LEGACY_COLOR_TO_HEX.get(color)
+            if new_color:
+                updates["color"] = new_color
+            else:
+                unmapped_colors.append(color)
+
+        if updates:
+            await categories_collection.update_one(
+                {"_id": cat["_id"]},
+                {"$set": updates},
+            )
+            updated += 1
+            logger.info(
+                "Migrated category '%s' (id=%s): %s",
+                cat.get("name"),
+                cat["_id"],
+                updates,
+            )
+        else:
+            skipped += 1
+
+    result = {
+        "message": f"Migration complete: {updated} updated, {skipped} skipped",
+        "updated": updated,
+        "skipped": skipped,
+    }
+    if unmapped_icons:
+        result["unmapped_icons"] = list(set(unmapped_icons))
+    if unmapped_colors:
+        result["unmapped_colors"] = list(set(unmapped_colors))
+
+    return result

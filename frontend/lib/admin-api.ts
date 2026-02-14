@@ -66,4 +66,20 @@ export const adminApi = {
     if (!response.ok) throw new Error("Failed to clear all data");
     return response.json();
   },
+
+  migrateCategoryIcons: async (): Promise<{
+    message: string;
+    updated: number;
+    skipped: number;
+    unmapped_icons?: string[];
+    unmapped_colors?: string[];
+  }> => {
+    const response = await fetch(`${API_BASE_URL}/api/admin/migrate-category-icons`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error("Failed to migrate category icons");
+    return response.json();
+  },
 };

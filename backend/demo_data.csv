@@ -1,0 +1,84 @@
+name,category,type,amount,owner_slot,month
+Salary (Simon),Salary,income,32000,user1,2026-02
+Salary (Partner),Salary,income,28000,user2,2026-02
+SU (Simon),SU,income,6500,user1,2026-02
+Freelance,Freelance,income,4500,user1,2026-02
+Rent,Rent,expense,8900,shared,2026-02
+Groceries,Groceries,expense,4000,shared,2026-02
+Utilities,Utilities,expense,1200,shared,2026-02
+Insurance,Insurance,expense,1800,shared,2026-02
+Streaming,Streaming,expense,250,shared,2026-02
+Phone & Internet,Phone & Internet,expense,600,shared,2026-02
+Car Payment,Car,expense,2200,shared,2026-02
+Gas,Gas,expense,800,shared,2026-02
+Gym Membership,Health & Fitness,expense,350,user1,2026-02
+Clothing (Simon),Clothing,expense,500,user1,2026-02
+Subscriptions (Simon),Subscriptions,expense,150,user1,2026-02
+Gym Membership (Partner),Health & Fitness,expense,350,user2,2026-02
+Clothing (Partner),Clothing,expense,700,user2,2026-02
+Public Transport,Public Transport,expense,380,user2,2026-02
+Vacation Fund,Vacation,savings,3000,shared,2026-02
+Emergency Fund,Emergency Fund,savings,5000,shared,2026-02
+House Fund,House Fund,savings,4000,shared,2026-02
+Investments,Investments,savings,2000,user1,2026-02
+Hobbies (Simon),Hobbies,fun,600,user1,2026-02
+Gaming,Gaming,fun,300,user1,2026-02
+Dining Out,Dining Out,fun,1500,shared,2026-02
+Travel,Travel,fun,1000,shared,2026-02
+Shopping (Partner),Shopping,fun,800,user2,2026-02
+Hobbies (Partner),Hobbies,fun,500,user2,2026-02
+Salary (Simon),Salary,income,32000,user1,2026-01
+Salary (Partner),Salary,income,28000,user2,2026-01
+SU (Simon),SU,income,6500,user1,2026-01
+Freelance,Freelance,income,3000,user1,2026-01
+Rent,Rent,expense,8900,shared,2026-01
+Groceries,Groceries,expense,3800,shared,2026-01
+Utilities,Utilities,expense,1400,shared,2026-01
+Insurance,Insurance,expense,1800,shared,2026-01
+Streaming,Streaming,expense,250,shared,2026-01
+Phone & Internet,Phone & Internet,expense,600,shared,2026-01
+Car Payment,Car,expense,2200,shared,2026-01
+Gas,Gas,expense,900,shared,2026-01
+Gym Membership,Health & Fitness,expense,350,user1,2026-01
+Clothing (Simon),Clothing,expense,300,user1,2026-01
+Subscriptions (Simon),Subscriptions,expense,150,user1,2026-01
+Gym Membership (Partner),Health & Fitness,expense,350,user2,2026-01
+Public Transport,Public Transport,expense,380,user2,2026-01
+Vacation Fund,Vacation,savings,3000,shared,2026-01
+Emergency Fund,Emergency Fund,savings,5000,shared,2026-01
+House Fund,House Fund,savings,4000,shared,2026-01
+Investments,Investments,savings,1500,user1,2026-01
+Hobbies (Simon),Hobbies,fun,400,user1,2026-01
+Gaming,Gaming,fun,250,user1,2026-01
+Dining Out,Dining Out,fun,1200,shared,2026-01
+Travel,Travel,fun,500,shared,2026-01
+Shopping (Partner),Shopping,fun,600,user2,2026-01
+Hobbies (Partner),Hobbies,fun,400,user2,2026-01
+Salary (Simon),Salary,income,32000,user1,2025-12
+Salary (Partner),Salary,income,28000,user2,2025-12
+SU (Simon),SU,income,6500,user1,2025-12
+Rent,Rent,expense,8900,shared,2025-12
+Groceries,Groceries,expense,4200,shared,2025-12
+Utilities,Utilities,expense,1500,shared,2025-12
+Insurance,Insurance,expense,1800,shared,2025-12
+Streaming,Streaming,expense,250,shared,2025-12
+Phone & Internet,Phone & Internet,expense,600,shared,2025-12
+Car Payment,Car,expense,2200,shared,2025-12
+Gas,Gas,expense,750,shared,2025-12
+Gym Membership,Health & Fitness,expense,350,user1,2025-12
+Clothing (Simon),Clothing,expense,1200,user1,2025-12
+Subscriptions (Simon),Subscriptions,expense,150,user1,2025-12
+Gym Membership (Partner),Health & Fitness,expense,350,user2,2025-12
+Clothing (Partner),Clothing,expense,900,user2,2025-12
+Public Transport,Public Transport,expense,380,user2,2025-12
+Vacation Fund,Vacation,savings,2000,shared,2025-12
+Emergency Fund,Emergency Fund,savings,5000,shared,2025-12
+House Fund,House Fund,savings,3000,shared,2025-12
+Investments,Investments,savings,1500,user1,2025-12
+Hobbies (Simon),Hobbies,fun,800,user1,2025-12
+Gaming,Gaming,fun,500,user1,2025-12
+Dining Out,Dining Out,fun,2000,shared,2025-12
+Travel,Travel,fun,2000,shared,2025-12
+Shopping (Partner),Shopping,fun,1000,user2,2025-12
+Hobbies (Partner),Hobbies,fun,600,user2,2025-12
+Gifts (Christmas),Gifts,fun,3000,shared,2025-12

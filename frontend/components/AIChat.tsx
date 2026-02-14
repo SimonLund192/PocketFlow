@@ -1,21 +1,30 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { sendChatMessage, ChatMessage } from "@/lib/ai-api";
-import { X, Send, MessageSquare, Minimize2 } from "lucide-react";
+import { sendChatMessage, confirmBudgetEntries, uploadCSV, ChatMessage, PendingAction, ProposedEntry } from "@/lib/ai-api";
+import { X, Send, MessageSquare, Minimize2, Upload, Check, XCircle, Loader2 } from "lucide-react";
 
-export default function AIChat() {
+interface AIChatProps {
+  initialMessage?: string;
+}
+
+export default function AIChat({ initialMessage }: AIChatProps) {
+  const defaultMessage = initialMessage || "Hi! I'm your PocketFlow AI assistant. I can help you with your budget, transactions, and financial insights. You can also upload a CSV bank statement and I'll categorize everything for you. What would you like to do?";
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Hi! I'm your PocketFlow AI assistant. I can help you with your budget, transactions, and financial insights. What would you like to know?",
+      content: defaultMessage,
     },
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -36,6 +45,7 @@ export default function AIChat() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setPendingAction(null);
 
     try {
       const response = await sendChatMessage({
@@ -43,6 +53,11 @@ export default function AIChat() {
       });
 
       setMessages((prev) => [...prev, response.message]);
+
+      // Check if there's a pending action requiring confirmation
+      if (response.pending_action) {
+        setPendingAction(response.pending_action);
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       setMessages((prev) => [
@@ -50,6 +65,84 @@ export default function AIChat() {
         {
           role: "assistant",
           content: "Sorry, I encountered an error. Please try again.",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!pendingAction || isConfirming) return;
+
+    setIsConfirming(true);
+
+    try {
+      const response = await confirmBudgetEntries(pendingAction.entries);
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: "✅ Confirmed" },
+        response.message,
+      ]);
+      setPendingAction(null);
+    } catch (error) {
+      console.error("Error confirming:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, there was an error saving the entries. Please try again.",
+        },
+      ]);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const handleReject = () => {
+    setPendingAction(null);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: "❌ Cancelled" },
+      {
+        role: "assistant",
+        content: "No problem, I've cancelled that. Let me know if you'd like to try again or make changes.",
+      },
+    ]);
+  };
+
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: `📎 Uploaded: ${file.name}` },
+    ]);
+    setIsLoading(true);
+    setPendingAction(null);
+
+    try {
+      const response = await uploadCSV(file);
+
+      setMessages((prev) => [...prev, response.message]);
+
+      if (response.pending_action) {
+        setPendingAction(response.pending_action);
+      }
+    } catch (error) {
+      console.error("Error uploading CSV:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, I couldn't process that CSV file. Make sure it's a valid CSV with transaction data.",
         },
       ]);
     } finally {
@@ -198,13 +291,60 @@ export default function AIChat() {
             </div>
           </div>
         ))}
+
+        {/* Pending action confirmation card */}
+        {pendingAction && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+              <p className="text-sm font-semibold text-amber-800">Awaiting your confirmation</p>
+            </div>
+            <div className="text-sm text-amber-900 space-y-1">
+              {pendingAction.entries.map((entry: ProposedEntry, i: number) => (
+                <div key={i} className="flex justify-between items-center py-1 border-b border-amber-100 last:border-0">
+                  <div>
+                    <span className="font-medium">{entry.name}</span>
+                    <span className="text-amber-700 ml-2 text-xs">({entry.category_name} · {entry.category_type})</span>
+                  </div>
+                  <span className="font-semibold">{entry.amount.toLocaleString('da-DK')} kr.</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleConfirm}
+                disabled={isConfirming}
+                className="flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {isConfirming ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Check className="w-4 h-4" />
+                )}
+                {isConfirming ? "Saving..." : "Confirm & Save"}
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={isConfirming}
+                className="flex items-center gap-1 px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+              >
+                <XCircle className="w-4 h-4" />
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {isLoading && (
           <div className="flex justify-start">
             <div className="bg-gray-100 text-gray-900 rounded-lg p-3">
-              <div className="flex gap-1">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                </div>
+                <span className="text-xs text-gray-500">Thinking...</span>
               </div>
             </div>
           </div>
@@ -214,13 +354,30 @@ export default function AIChat() {
 
       {/* Input */}
       <div className="p-4 border-t border-gray-200">
+        {/* Hidden file input for CSV upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.tsv,.txt"
+          onChange={handleCSVUpload}
+          className="hidden"
+        />
         <div className="flex gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 disabled:text-gray-300 disabled:hover:bg-transparent rounded-lg transition-colors"
+            aria-label="Upload CSV"
+            title="Upload bank CSV"
+          >
+            <Upload className="w-5 h-5" />
+          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask me anything..."
+            placeholder="e.g. 'I bought groceries for 500 kr.' or ask anything..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             disabled={isLoading}
           />

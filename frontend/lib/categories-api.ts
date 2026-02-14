@@ -71,4 +71,14 @@ export const categoriesApi = {
     });
     if (!response.ok) throw new Error("Failed to delete category");
   },
+
+  seedDefaults: async (): Promise<{ message: string; inserted: number; skipped: number }> => {
+    const response = await fetch(`${API_BASE_URL}/api/categories/seed-defaults`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+    if (!response.ok) throw new Error("Failed to seed default categories");
+    return response.json();
+  },
 };

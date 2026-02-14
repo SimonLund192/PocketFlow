@@ -574,7 +574,7 @@ export default function Goals() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title="Goals" 
-        subtitle="Welcome Simon Lund" 
+        subtitle="Track your savings goals and monitor your progress." 
         breadcrumb={["Dashboard", "Goals"]} 
       />
 

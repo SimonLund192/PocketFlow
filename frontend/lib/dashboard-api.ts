@@ -20,12 +20,14 @@ export interface ExpenseBreakdown {
   category: string;
   amount: number;
   percentage: number;
+  icon: string;
+  color: string;
 }
 
 /**
  * Fetch dashboard statistics
  */
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(month?: string): Promise<DashboardStats> {
   // Get the token from localStorage
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   
@@ -37,7 +39,8 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/dashboard/stats`, {
+  const params = month ? `?month=${month}` : '';
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/stats${params}`, {
     headers
   });
   
@@ -75,7 +78,7 @@ export async function getBalanceTrends(): Promise<BalanceTrend[]> {
 /**
  * Fetch expense breakdown
  */
-export async function getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
+export async function getExpenseBreakdown(month?: string): Promise<ExpenseBreakdown[]> {
   // Get the token from localStorage
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   
@@ -87,7 +90,8 @@ export async function getExpenseBreakdown(): Promise<ExpenseBreakdown[]> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/dashboard/expense-breakdown`, {
+  const params = month ? `?month=${month}` : '';
+  const response = await fetch(`${API_BASE_URL}/api/dashboard/expense-breakdown${params}`, {
     headers
   });
   
