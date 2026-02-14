@@ -21,7 +21,7 @@ export default function WalletsPage() {
     <div className="min-h-screen bg-gray-50">
       <Header
         title="Wallets"
-        subtitle="Welcome Ekash Finance Management"
+        subtitle="View and manage your wallet balances."
         breadcrumb={["Home", "Wallets"]}
       />
 

@@ -129,7 +129,7 @@ export default function Analytics() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title={activeTab === "Transaction History" ? "Transaction History" : "Analytics"}
-        subtitle={activeTab === "Transaction History" || activeTab === "Expenses" ? "Welcome Ekash Finance Management" : "Showing insights for your most recent activity."}
+        subtitle={activeTab === "Transaction History" ? "Browse and filter your past transactions." : activeTab === "Expenses" ? "View a breakdown of your spending by category." : "Insights and trends from your recent financial activity."}
         breadcrumb={activeTab === "Transaction History" ? ["Home", "Transaction History"] : ["Dashboard", "Analytics"]} 
       />
 

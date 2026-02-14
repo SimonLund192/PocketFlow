@@ -303,7 +303,7 @@ export default function Settings() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title="Account" 
-        subtitle="Welcome Simon Lund" 
+        subtitle="Manage your profile, categories, and preferences." 
         breadcrumb={["Dashboard", "Account"]} 
       />
 

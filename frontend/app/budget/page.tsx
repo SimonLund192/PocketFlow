@@ -664,7 +664,7 @@ export default function BudgetPage() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title="Budget" 
-        subtitle="Welcome Simon Lund" 
+        subtitle="Plan and manage your monthly budget across all categories." 
         breadcrumb={["Dashboard", "Budget"]}
         action={
           <input

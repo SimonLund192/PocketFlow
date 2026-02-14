@@ -7,8 +7,10 @@ import ExpenseBreakdown from "@/components/ExpenseBreakdown";
 import Header from "@/components/Header";
 import AIChat from "@/components/AIChat";
 import { getDashboardStats, DashboardStats } from "@/lib/dashboard-api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +46,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title="Dashboard" 
-        subtitle="Welcome Simon Lund" 
+        subtitle={`Welcome ${user?.full_name || "User"}`} 
         breadcrumb={["Dashboard"]} 
       />
 
