@@ -3,23 +3,20 @@
 import { Card } from "@/components/ui/card";
 import Header from "@/components/Header";
 import BudgetTabContent from "@/components/BudgetTabContent";
-import ConfirmationDialog from "@/components/ConfirmationDialog";
-import { TrendingUp, TrendingDown, Plus, Trash2 } from "lucide-react";
+import { TrendingUp, TrendingDown } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { categoriesApi, Category } from "@/lib/categories-api";
 import { getOrCreateBudget, Budget } from "@/lib/budgets-api";
 import { 
-  getBudgetLineItems, 
   getBudgetLineItemsByBudget,
   createBudgetLineItem, 
   updateBudgetLineItem, 
   deleteBudgetLineItem,
-  BudgetLineItem,
-  BudgetLineItemWithCategory
 } from "@/lib/budget-line-items-api";
 import { authApi } from "@/lib/auth-api";
 import QuickCategoryDialog from "@/components/QuickCategoryDialog";
 import { useMonth } from "@/contexts/MonthContext";
+import { BudgetLineItemFormValues } from "@/components/BudgetLineItemFormDialog";
 
 interface BudgetItem {
   id: string;
@@ -83,10 +80,6 @@ export default function BudgetPage() {
 
   // User 2 Income items
   const [user2IncomeItems, setUser2IncomeItems] = useState<BudgetItem[]>([]);
-
-  // Save confirmation dialog state
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [saveDialogMessage, setSaveDialogMessage] = useState("");
 
   // Refs for debouncing saves
   const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -276,28 +269,46 @@ export default function BudgetPage() {
   // Fun items (shared)
   const [sharedFunItems, setSharedFunItems] = useState<BudgetItem[]>([]);
 
-  // Personal Savings
-  const [user1PersonalItems, setUser1PersonalItems] = useState<BudgetItem[]>([]);
-  const [user2PersonalItems, setUser2PersonalItems] = useState<BudgetItem[]>([]);
-
-  // Generic functions for managing items with backend persistence
+  // Add a new budget item from the modal form — saves immediately to backend
   const addItem = async (
     setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, 
     ownerSlot: 'user1' | 'user2' | 'shared',
-    category: string = ""
+    values: BudgetLineItemFormValues,
   ) => {
     if (!currentBudget) {
       console.error('No budget loaded');
       return;
     }
 
+    // Optimistic local add with temp ID
+    const tempId = `temp-${Date.now()}`;
     const newItem: BudgetItem = {
-      id: `temp-${Date.now()}`, // Temporary ID until saved to backend
-      name: "",
-      category: category,
-      amount: 0,
+      id: tempId,
+      name: values.name,
+      category: values.category,
+      amount: values.amount,
     };
     setter((prev) => [...prev, newItem]);
+
+    // Immediately persist to backend
+    try {
+      const created = await createBudgetLineItem({
+        budget_id: currentBudget.id,
+        name: values.name,
+        category_id: values.category,
+        amount: values.amount,
+        owner_slot: ownerSlot,
+      });
+      // Replace temp ID with real ID
+      setter((prev) =>
+        prev.map((i) => (i.id === tempId ? { ...i, id: created.id } : i))
+      );
+      createdItems.current.add(created.id);
+    } catch (error) {
+      console.error('Failed to create budget line item:', error);
+      // Remove the optimistic item on error
+      setter((prev) => prev.filter((i) => i.id !== tempId));
+    }
   };
 
   const saveItem = async (
@@ -449,172 +460,6 @@ export default function BudgetPage() {
     }
   };
 
-  // Simple local-only functions for non-income tabs
-  const addItemLocal = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, category: string = "") => {
-    const newItem: BudgetItem = {
-      id: Date.now().toString(),
-      name: "",
-      category: category,
-      amount: 0,
-    };
-    setter((prev) => [...prev, newItem]);
-  };
-
-  const removeItemLocal = (setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, id: string) => {
-    setter((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const updateItemLocal = (
-    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>,
-    id: string,
-    field: keyof BudgetItem,
-    value: any
-  ) => {
-    setter((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    );
-  };
-
-  // Manual save function for Save Budget button
-  const saveBudget = async () => {
-    if (!currentBudget) {
-      setSaveDialogMessage('No budget loaded. Please wait for the page to load.');
-      setShowSaveDialog(true);
-      return;
-    }
-
-    console.log('=== MANUAL SAVE TRIGGERED ===');
-    
-    let savedCount = 0;
-    let errorCount = 0;
-
-    // Collect all items from all tabs
-    const allItems: Array<{ item: BudgetItem; setter: any; owner: "user1" | "user2" | "shared" }> = [
-      ...user1IncomeItems.map(item => ({ item, setter: setUser1IncomeItems, owner: 'user1' as const })),
-      ...user2IncomeItems.map(item => ({ item, setter: setUser2IncomeItems, owner: 'user2' as const })),
-      ...sharedExpenseItems.map(item => ({ item, setter: setSharedExpenseItems, owner: 'shared' as const })),
-      ...user1PersonalExpenses.map(item => ({ item, setter: setUser1PersonalExpenses, owner: 'user1' as const })),
-      ...user2PersonalExpenses.map(item => ({ item, setter: setUser2PersonalExpenses, owner: 'user2' as const })),
-      ...sharedSavingsItems.map(item => ({ item, setter: setSharedSavingsItems, owner: 'shared' as const })),
-      ...sharedFunItems.map(item => ({ item, setter: setSharedFunItems, owner: 'shared' as const })),
-    ];
-
-    // Save all items
-    for (const { item, setter, owner } of allItems) {
-      try {
-        await saveItem(item, owner, setter);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save item:', item, error);
-        errorCount++;
-      }
-    }
-
-    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-    
-    if (errorCount > 0) {
-      setSaveDialogMessage(`Budget saved with ${errorCount} errors. Check console for details.`);
-    } else {
-      setSaveDialogMessage(`Budget saved successfully! ${savedCount} items saved.`);
-    }
-    setShowSaveDialog(true);
-  };
-
-  // Save handlers for each tab
-  const saveSharedExpenses = async () => {
-    if (!currentBudget) {
-      alert('No budget loaded. Please wait for the page to load.');
-      return;
-    }
-    console.log('=== SAVING SHARED EXPENSES ===');
-    let savedCount = 0;
-    let errorCount = 0;
-    for (const item of sharedExpenseItems) {
-      try {
-        await saveItem(item, 'shared', setSharedExpenseItems);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save shared expense:', item, error);
-        errorCount++;
-      }
-    }
-    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-    if (errorCount > 0) {
-      alert(`Shared expenses saved with ${errorCount} errors. Check console for details.`);
-    } else {
-      alert(`Shared expenses saved successfully! ${savedCount} items saved.`);
-    }
-  };
-
-  const savePersonalExpenses = async () => {
-    if (!currentBudget) {
-      alert('No budget loaded. Please wait for the page to load.');
-      return;
-    }
-    console.log('=== SAVING PERSONAL EXPENSES ===');
-    let savedCount = 0;
-    let errorCount = 0;
-    for (const item of [...user1PersonalExpenses, ...user2PersonalExpenses]) {
-      try {
-        const ownerSlot = user1PersonalExpenses.includes(item) ? 'user1' : 'user2';
-        const setter = user1PersonalExpenses.includes(item) ? setUser1PersonalExpenses : setUser2PersonalExpenses;
-        await saveItem(item, ownerSlot, setter);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save personal expense:', item, error);
-        errorCount++;
-      }
-    }
-    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-    if (errorCount > 0) {
-      alert(`Personal expenses saved with ${errorCount} errors. Check console for details.`);
-    } else {
-      alert(`Personal expenses saved successfully! ${savedCount} items saved.`);
-    }
-  };
-
-  const saveSharedSavings = async () => {
-    console.log('=== SAVE SHARED SAVINGS CLICKED ===');
-    let savedCount = 0;
-    let errorCount = 0;
-    for (const item of sharedSavingsItems) {
-      try {
-        await saveItem(item, 'shared', setSharedSavingsItems);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save shared savings:', item, error);
-        errorCount++;
-      }
-    }
-    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-    if (errorCount > 0) {
-      alert(`Shared savings saved with ${errorCount} errors. Check console for details.`);
-    } else {
-      alert(`Shared savings saved successfully! ${savedCount} items saved.`);
-    }
-  };
-
-  const saveFunItems = async () => {
-    console.log('=== SAVE FUN ITEMS CLICKED ===');
-    let savedCount = 0;
-    let errorCount = 0;
-    for (const item of sharedFunItems) {
-      try {
-        await saveItem(item, 'shared', setSharedFunItems);
-        savedCount++;
-      } catch (error) {
-        console.error('Failed to save fun item:', item, error);
-        errorCount++;
-      }
-    }
-    console.log(`=== SAVE COMPLETE: ${savedCount} saved, ${errorCount} errors ===`);
-    if (errorCount > 0) {
-      alert(`Fun items saved with ${errorCount} errors. Check console for details.`);
-    } else {
-      alert(`Fun items saved successfully! ${savedCount} items saved.`);
-    }
-  };
-
   // Calculate totals
   const totalIncome = 
     user1IncomeItems.reduce((sum, item) => sum + item.amount, 0) +
@@ -648,6 +493,14 @@ export default function BudgetPage() {
     if (newCat.type === "fun") setFunCategories((prev) => [...prev, newCat]);
   };
 
+  // Quick category button rendered in the left column of each tab
+  const quickCategorySlot = (
+    <QuickCategoryDialog
+      defaultType={tabToCategoryType(activeTab)}
+      onCategoryCreated={handleCategoryCreated}
+    />
+  );
+
   const tabs = [
     { id: "income" as TabType, label: "Income" },
     { id: "shared-expenses" as TabType, label: "Shared Expenses" },
@@ -655,6 +508,25 @@ export default function BudgetPage() {
     { id: "shared-savings" as TabType, label: "Shared Savings" },
     { id: "fun" as TabType, label: "Fun" },
   ];
+
+  // Tabs slot — rendered inside BudgetTabContent's right column header
+  const tabsSlot = (
+    <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => setActiveTab(tab.id)}
+          className={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${
+            activeTab === tab.id
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -706,69 +578,40 @@ export default function BudgetPage() {
           />
         </div>
 
-        {/* Budget Form with Tabs */}
-        <Card className="p-0 bg-white overflow-hidden">
-          {/* Save Budget Button */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center gap-3">
-            <button
-              onClick={saveBudget}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-            >
-              Save Budget
-            </button>
-            <QuickCategoryDialog
-              defaultType={tabToCategoryType(activeTab)}
-              onCategoryCreated={handleCategoryCreated}
-            />
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="border-b border-gray-200">
-            <div className="flex">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? "text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50"
-                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Tab Content */}
-          <div className="p-8">
+        {/* Tab Content */}
+        <div>
             {/* Income Tab */}
             {activeTab === "income" && (
               <BudgetTabContent
                 layout="double"
+                leftHeaderSlot={quickCategorySlot}
+                rightHeaderSlot={tabsSlot}
                 columns={[
                   {
                     title: user1Name,
                     items: user1IncomeItems,
-                    onAddItem: () => addItem(setUser1IncomeItems, "user1", ""),
-                    onUpdateItem: (id, field, value) => 
+                    ownerSlot: "user1",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setUser1IncomeItems, "user1", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setUser1IncomeItems, id, field, value, "user1"),
-                    onRemoveItem: (id) => removeItem(setUser1IncomeItems, id),
+                    onRemoveItem: (id: string) => removeItem(setUser1IncomeItems, id),
                     categories: incomeCategories,
                     namePlaceholder: "Name",
-                    addButtonText: "Add Item",
+                    addButtonText: "Add Income",
                   },
                   {
                     title: user2Name,
                     items: user2IncomeItems,
-                    onAddItem: () => addItem(setUser2IncomeItems, "user2", ""),
-                    onUpdateItem: (id, field, value) => 
+                    ownerSlot: "user2",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setUser2IncomeItems, "user2", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setUser2IncomeItems, id, field, value, "user2"),
-                    onRemoveItem: (id) => removeItem(setUser2IncomeItems, id),
+                    onRemoveItem: (id: string) => removeItem(setUser2IncomeItems, id),
                     categories: incomeCategories,
                     namePlaceholder: "Name",
-                    addButtonText: "Add Item",
+                    addButtonText: "Add Income",
                   },
                 ]}
               />
@@ -779,13 +622,17 @@ export default function BudgetPage() {
               <BudgetTabContent
                 description="Shared expenses split between both users"
                 layout="single"
+                leftHeaderSlot={quickCategorySlot}
+                rightHeaderSlot={tabsSlot}
                 columns={[
                   {
                     items: sharedExpenseItems,
-                    onAddItem: () => addItem(setSharedExpenseItems, "shared", ""),
-                    onUpdateItem: (id, field, value) =>
+                    ownerSlot: "shared",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setSharedExpenseItems, "shared", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setSharedExpenseItems, id, field, value, "shared"),
-                    onRemoveItem: (id) => removeItem(setSharedExpenseItems, id),
+                    onRemoveItem: (id: string) => removeItem(setSharedExpenseItems, id),
                     categories: expenseCategories,
                     namePlaceholder: "Expense name",
                     addButtonText: "Add Shared Expense",
@@ -798,28 +645,34 @@ export default function BudgetPage() {
             {activeTab === "personal-expenses" && (
               <BudgetTabContent
                 layout="double"
+                leftHeaderSlot={quickCategorySlot}
+                rightHeaderSlot={tabsSlot}
                 columns={[
                   {
                     title: user1Name,
                     items: user1PersonalExpenses,
-                    onAddItem: () => addItem(setUser1PersonalExpenses, "user1", ""),
-                    onUpdateItem: (id, field, value) =>
+                    ownerSlot: "user1",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setUser1PersonalExpenses, "user1", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setUser1PersonalExpenses, id, field, value, "user1"),
-                    onRemoveItem: (id) => removeItem(setUser1PersonalExpenses, id),
+                    onRemoveItem: (id: string) => removeItem(setUser1PersonalExpenses, id),
                     categories: expenseCategories,
                     namePlaceholder: "Expense name",
-                    addButtonText: "Add Item",
+                    addButtonText: "Add Expense",
                   },
                   {
                     title: user2Name,
                     items: user2PersonalExpenses,
-                    onAddItem: () => addItem(setUser2PersonalExpenses, "user2", ""),
-                    onUpdateItem: (id, field, value) =>
+                    ownerSlot: "user2",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setUser2PersonalExpenses, "user2", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setUser2PersonalExpenses, id, field, value, "user2"),
-                    onRemoveItem: (id) => removeItem(setUser2PersonalExpenses, id),
+                    onRemoveItem: (id: string) => removeItem(setUser2PersonalExpenses, id),
                     categories: expenseCategories,
                     namePlaceholder: "Expense name",
-                    addButtonText: "Add Item",
+                    addButtonText: "Add Expense",
                   },
                 ]}
               />
@@ -830,16 +683,20 @@ export default function BudgetPage() {
               <BudgetTabContent
                 description="Savings goals shared between both users"
                 layout="single"
+                leftHeaderSlot={quickCategorySlot}
+                rightHeaderSlot={tabsSlot}
                 columns={[
                   {
                     items: sharedSavingsItems,
-                    onAddItem: () => addItem(setSharedSavingsItems, "shared", ""),
-                    onUpdateItem: (id, field, value) =>
+                    ownerSlot: "shared",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setSharedSavingsItems, "shared", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setSharedSavingsItems, id, field, value, "shared"),
-                    onRemoveItem: (id) => removeItem(setSharedSavingsItems, id),
+                    onRemoveItem: (id: string) => removeItem(setSharedSavingsItems, id),
                     categories: savingsCategories,
                     namePlaceholder: "Savings goal name",
-                    addButtonText: "Add Item",
+                    addButtonText: "Add Savings Item",
                   },
                 ]}
               />
@@ -850,13 +707,17 @@ export default function BudgetPage() {
               <BudgetTabContent
                 description="Fun spending shared between both users"
                 layout="single"
+                leftHeaderSlot={quickCategorySlot}
+                rightHeaderSlot={tabsSlot}
                 columns={[
                   {
                     items: sharedFunItems,
-                    onAddItem: () => addItem(setSharedFunItems, "shared", ""),
-                    onUpdateItem: (id, field, value) =>
+                    ownerSlot: "shared",
+                    onAddItem: (values: BudgetLineItemFormValues) =>
+                      addItem(setSharedFunItems, "shared", values),
+                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
                       updateItem(setSharedFunItems, id, field, value, "shared"),
-                    onRemoveItem: (id) => removeItem(setSharedFunItems, id),
+                    onRemoveItem: (id: string) => removeItem(setSharedFunItems, id),
                     categories: funCategories,
                     namePlaceholder: "Fun activity name",
                     addButtonText: "Add Fun Item",
@@ -865,19 +726,7 @@ export default function BudgetPage() {
               />
             )}
           </div>
-        </Card>
       </div>
-
-      {/* Save Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={showSaveDialog}
-        onClose={() => setShowSaveDialog(false)}
-        onConfirm={() => setShowSaveDialog(false)}
-        title="Budget Saved"
-        description={saveDialogMessage}
-        confirmText="OK"
-        variant="default"
-      />
     </div>
   );
 }

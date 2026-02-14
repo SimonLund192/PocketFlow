@@ -75,9 +75,9 @@ export default function QuickCategoryDialog({
       <button
         type="button"
         onClick={handleOpen}
-        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
+        className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-500 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all"
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="w-3.5 h-3.5" />
         New Category
       </button>
 
