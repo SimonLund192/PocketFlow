@@ -72,8 +72,8 @@ export default function Header({ title, subtitle, breadcrumb, action }: HeaderPr
         </div>
       </div>
 
-      {/* Breadcrumb */}
-      {breadcrumb && breadcrumb.length > 0 && (
+      {/* Breadcrumb — only render when there are 2+ crumbs (a real trail) */}
+      {breadcrumb && breadcrumb.length > 1 && (
         <div className="flex items-center gap-2 mt-4 text-sm text-gray-500">
           {breadcrumb.map((crumb, index) => (
             <span key={index}>

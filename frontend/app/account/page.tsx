@@ -9,6 +9,7 @@ import Tabs from "@/components/Tabs";
 import { categoriesApi, Category } from "@/lib/categories-api";
 import { adminApi } from "@/lib/admin-api";
 import { authApi } from "@/lib/auth-api";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface EditingCategory {
   id: string;
@@ -19,11 +20,22 @@ interface EditingCategory {
 }
 
 export default function Settings() {
+  const { user } = useAuth();
+
   // Initialize activeTab with default value (no localStorage during SSR)
   const [activeTab, setActiveTab] = useState("Account");
   const [isTabInitialized, setIsTabInitialized] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [loadingProfile, setLoadingProfile] = useState(false);
+
+  // Helper to get user initials from full name
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   
   // Load saved tab from localStorage after component mounts (client-side only)
   useEffect(() => {
@@ -321,14 +333,14 @@ export default function Settings() {
             <Card className="p-8 bg-white border border-gray-200 rounded-2xl">
             <div className="flex items-start gap-6">
               <div className="w-16 h-16 rounded-full bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
-                SL
+                {user ? getInitials(user.full_name) : "?"}
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Welcome, Simon Lund!
+                  Welcome, {user?.full_name || "User"}!
                 </h2>
                 <p className="text-sm text-gray-500 mb-8">
-                  Account created on 15. januar 2026
+                  Manage your account settings and preferences.
                 </p>
 
                 {/* Verify Account */}
@@ -469,10 +481,10 @@ export default function Settings() {
                 <div className="mb-6">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-full bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
-                      SL
+                      {user ? getInitials(user.full_name) : "?"}
                     </div>
                     <div>
-                      <h3 className="font-bold text-gray-900 mb-1">{fullName}</h3>
+                      <h3 className="font-bold text-gray-900 mb-1">{fullName || user?.full_name || "User"}</h3>
                       <p className="text-xs text-blue-600">Max file size is 20mb</p>
                     </div>
                   </div>

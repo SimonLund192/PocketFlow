@@ -52,11 +52,10 @@ budget-tracker/
 │   │   ├── page.tsx             # Dashboard
 │   │   ├── budget/page.tsx      # Budget page (5 tabs: income, shared-expenses, personal-expenses, shared-savings, fun)
 │   │   ├── goals/page.tsx       # Goals page
-│   │   ├── analytics/page.tsx   # Analytics page
 │   │   ├── account/page.tsx     # Settings / Categories CRUD
 │   │   ├── database/page.tsx    # Database viewer
 │   │   └── login/page.tsx
-│   ├── components/              # Reusable UI (Header, Tabs, KPICard, StatCard, AIChat, etc.)
+│   ├── components/              # Reusable UI (Header, Tabs, KPICard, StatCard, AISidebar, etc.)
 │   ├── lib/                     # API helpers, auth context, utilities
 │   └── __tests__/
 ├── docs/                        # Extensive design + schema docs
@@ -100,7 +99,9 @@ budget-tracker/
 - Backend: `backend/app/ai/` — Mistral tool-calling agent.
 - Tools defined in `tools.py`, executed against real budget data.
 - System prompt loaded from `system_prompt.txt` with `{current_date}` and `{current_month}` placeholders.
-- Frontend: `frontend/components/AIChat.tsx` — floating chat widget.
+- Frontend: `frontend/components/AISidebar.tsx` — collapsible right-side panel (persists across all pages via layout.tsx).
+- Context managed by `frontend/contexts/AISidebarContext.tsx`.
+- Demo data seeding available via "Load Demo Data" button in the AI sidebar (POST /api/demo/seed).
 
 7) Testing
 - Backend: pytest + httpx AsyncClient. Fixtures in `conftest.py`.
@@ -113,3 +114,13 @@ budget-tracker/
 9) General
 - Keep files small and single-purpose; prefer multiple files over one large file.
 - Always write out the plan and ask for approval before starting a new task.
+
+10) Disabled pages (DO NOT touch)
+The following pages exist in the repo but are **disabled** — they are removed from
+the sidebar navigation, incomplete, and should NOT be worked on or considered when
+iterating on the app:
+- `frontend/app/wallets/page.tsx` — Wallets page (placeholder, no backend)
+- `frontend/app/transactions/page.tsx` — Transactions page (incomplete)
+- `frontend/app/analytics/page.tsx` — Analytics page (incomplete)
+Do not add these back to the sidebar, do not create routes or services for them,
+and do not reference them in new features until explicitly instructed.

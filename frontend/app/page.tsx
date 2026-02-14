@@ -49,7 +49,6 @@ export default function Dashboard() {
       <Header 
         title="Dashboard" 
         subtitle={`Welcome ${user?.full_name || "User"}`} 
-        breadcrumb={["Dashboard"]} 
       />
 
       {/* Main Content */}
