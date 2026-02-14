@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import ConditionalSidebar from "@/components/ConditionalSidebar";
+import ConditionalAISidebar from "@/components/ConditionalAISidebar";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { MonthProvider } from "@/contexts/MonthContext";
+import { AISidebarProvider } from "@/contexts/AISidebarContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,12 +24,15 @@ export default function RootLayout({
       <body className={`${inter.className} h-full m-0 p-0`}>
         <AuthProvider>
           <MonthProvider>
-            <div className="flex h-full bg-gray-50">
-              <ConditionalSidebar />
-              <main className="flex-1 overflow-y-scroll">
-                {children}
-              </main>
-            </div>
+            <AISidebarProvider>
+              <div className="flex h-full bg-gray-50">
+                <ConditionalSidebar />
+                <main className="flex-1 overflow-y-scroll transition-all duration-300 ease-in-out">
+                  {children}
+                </main>
+                <ConditionalAISidebar />
+              </div>
+            </AISidebarProvider>
           </MonthProvider>
         </AuthProvider>
       </body>

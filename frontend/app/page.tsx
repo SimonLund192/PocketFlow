@@ -5,7 +5,6 @@ import StatCard from "@/components/StatCard";
 import LifetimeSavingsChart from "@/components/LifetimeSavingsChart";
 import ExpenseBreakdown from "@/components/ExpenseBreakdown";
 import Header from "@/components/Header";
-import AIChat from "@/components/AIChat";
 import { getDashboardStats, DashboardStats } from "@/lib/dashboard-api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMonth } from "@/contexts/MonthContext";
@@ -103,9 +102,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-
-      {/* AI Chat Widget */}
-      <AIChat />
     </div>
   );
 }

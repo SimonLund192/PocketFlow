@@ -128,3 +128,32 @@ export async function uploadCSV(file: File): Promise<ChatResponse> {
 
   return response.json();
 }
+
+export interface DemoSeedSummary {
+  categories_created: number;
+  budgets_created: number;
+  line_items_created: number;
+  goals_created: number;
+}
+
+export interface DemoSeedResponse {
+  message: string;
+  summary: DemoSeedSummary;
+}
+
+/**
+ * Seed the current user's account with demo budget data
+ */
+export async function seedDemoData(): Promise<DemoSeedResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/demo/seed`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Failed to seed demo data' }));
+    throw new Error(error.detail || 'Failed to seed demo data');
+  }
+
+  return response.json();
+}
