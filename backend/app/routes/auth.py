@@ -13,6 +13,10 @@ from app.security import (
     UserRegister,
     Token
 )
+from app.services.default_categories import seed_default_categories
+import logging
+
+logger = logging.getLogger(__name__)
 
 class UserUpdate(BaseModel):
     partner_name: Optional[str] = None
@@ -57,6 +61,13 @@ async def register(user_data: UserRegister):
     
     # Insert user
     result = await users_collection.insert_one(user_doc)
+    
+    # Seed default categories for the new user
+    try:
+        count = await seed_default_categories(str(result.inserted_id))
+        logger.info(f"Seeded {count} default categories for new user {result.inserted_id}")
+    except Exception as e:
+        logger.error(f"Failed to seed default categories: {e}")
     
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

@@ -18,6 +18,7 @@ import {
   BudgetLineItemWithCategory
 } from "@/lib/budget-line-items-api";
 import { authApi } from "@/lib/auth-api";
+import QuickCategoryDialog from "@/components/QuickCategoryDialog";
 
 interface BudgetItem {
   id: string;
@@ -631,6 +632,26 @@ export default function BudgetPage() {
   const sharedFunTotal = sharedFunItems.reduce((sum, item) => sum + item.amount, 0);
   const remaining = totalIncome - sharedExpensesTotal - personalExpensesTotal - sharedSavingsTotal - sharedFunTotal;
 
+  // Map active tab to category type for the quick-create dialog
+  const tabToCategoryType = (tab: TabType): "income" | "expense" | "savings" | "fun" => {
+    switch (tab) {
+      case "income": return "income";
+      case "shared-expenses": return "expense";
+      case "personal-expenses": return "expense";
+      case "shared-savings": return "savings";
+      case "fun": return "fun";
+    }
+  };
+
+  // Called when a new category is created via the quick dialog
+  const handleCategoryCreated = (newCat: Category) => {
+    setCategories((prev) => [...prev, newCat]);
+    if (newCat.type === "income") setIncomeCategories((prev) => [...prev, newCat]);
+    if (newCat.type === "expense") setExpenseCategories((prev) => [...prev, newCat]);
+    if (newCat.type === "savings") setSavingsCategories((prev) => [...prev, newCat]);
+    if (newCat.type === "fun") setFunCategories((prev) => [...prev, newCat]);
+  };
+
   const tabs = [
     { id: "income" as TabType, label: "Income" },
     { id: "shared-expenses" as TabType, label: "Shared Expenses" },
@@ -700,13 +721,17 @@ export default function BudgetPage() {
         {/* Budget Form with Tabs */}
         <Card className="p-0 bg-white overflow-hidden">
           {/* Save Budget Button */}
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
+          <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center gap-3">
             <button
               onClick={saveBudget}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
             >
               Save Budget
             </button>
+            <QuickCategoryDialog
+              defaultType={tabToCategoryType(activeTab)}
+              onCategoryCreated={handleCategoryCreated}
+            />
           </div>
 
           {/* Tab Navigation */}
