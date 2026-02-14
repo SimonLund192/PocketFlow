@@ -4,13 +4,19 @@ import { useState, useRef, useEffect } from "react";
 import { sendChatMessage, ChatMessage } from "@/lib/ai-api";
 import { X, Send, MessageSquare, Minimize2 } from "lucide-react";
 
-export default function AIChat() {
+interface AIChatProps {
+  initialMessage?: string;
+}
+
+export default function AIChat({ initialMessage }: AIChatProps) {
+  const defaultMessage = initialMessage || "Hi! I'm your PocketFlow AI assistant. I can help you with your budget, transactions, and financial insights. What would you like to know?";
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: "Hi! I'm your PocketFlow AI assistant. I can help you with your budget, transactions, and financial insights. What would you like to know?",
+      content: defaultMessage,
     },
   ]);
   const [input, setInput] = useState("");

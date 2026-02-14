@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Callable
 from functools import wraps
 from datetime import datetime
 from bson import ObjectId
-from app.database import budget_line_items_collection, budgets_collection, categories_collection
+from app.database import budget_line_items_collection, budgets_collection, categories_collection, goals_collection
 from .schemas import CreateTransactionArgs, ListTransactionsArgs, DeleteTransactionArgs, GetDashboardStatsArgs
 
 # Registry to store available tools
@@ -102,6 +102,23 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
             "parameters": {
                 "type": "object",
                 "properties": {}
+            }
+        }
+    })
+
+    definitions.append({
+        "type": "function",
+        "function": {
+            "name": "get_goals_summary",
+            "description": "Get all savings goals for the user, including their name, target amount, amount saved so far, priority, type (shared or fun), completion status, and the current month's total savings contribution. Use this to answer questions about goal progress and time-to-completion estimates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {
+                        "type": "string",
+                        "description": "Optional month in YYYY-MM format to get that month's savings rate. Defaults to current month."
+                    }
+                }
             }
         }
     })
@@ -390,3 +407,165 @@ async def get_lifetime_savings(user_id: str, **kwargs) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"ok": False, "error": str(e), "code": "LIFETIME_SAVINGS_ERROR"}
+
+
+@register_tool("get_goals_summary")
+async def get_goals_summary(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Get all goals with progress and current month savings rate"""
+    try:
+        month = kwargs.get("month", datetime.now().strftime("%Y-%m"))
+
+        # 1. Fetch all goals for the user
+        goals_cursor = goals_collection.find({"user_id": user_id}).sort("priority", 1)
+        all_goals = await goals_cursor.to_list(length=100)
+
+        # 2. Calculate lifetime savings (shared + fun) to determine goal progress
+        lifetime_pipeline = [
+            {"$match": {"user_id": user_id}},
+            {
+                "$lookup": {
+                    "from": "budget_line_items",
+                    "localField": "_id",
+                    "foreignField": "budget_id",
+                    "as": "items"
+                }
+            },
+            {"$unwind": "$items"},
+            {
+                "$lookup": {
+                    "from": "categories",
+                    "localField": "items.category_id",
+                    "foreignField": "_id",
+                    "as": "category"
+                }
+            },
+            {"$unwind": "$category"},
+            {
+                "$group": {
+                    "_id": None,
+                    "total_shared_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$and": [
+                                    {"$eq": ["$category.type", "savings"]},
+                                    {"$eq": ["$items.owner_slot", "shared"]}
+                                ]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    },
+                    "total_fun_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$category.type", "fun"]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+        lifetime_result = await budgets_collection.aggregate(lifetime_pipeline).to_list(length=1)
+        lifetime_shared = lifetime_result[0]["total_shared_savings"] if lifetime_result else 0
+        lifetime_fun = lifetime_result[0]["total_fun_savings"] if lifetime_result else 0
+
+        # 3. Get THIS MONTH's savings to compute monthly savings rate
+        monthly_pipeline = [
+            {"$match": {"user_id": user_id, "month": month}},
+            {
+                "$lookup": {
+                    "from": "budget_line_items",
+                    "localField": "_id",
+                    "foreignField": "budget_id",
+                    "as": "items"
+                }
+            },
+            {"$unwind": "$items"},
+            {
+                "$lookup": {
+                    "from": "categories",
+                    "localField": "items.category_id",
+                    "foreignField": "_id",
+                    "as": "category"
+                }
+            },
+            {"$unwind": "$category"},
+            {
+                "$group": {
+                    "_id": None,
+                    "monthly_shared_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$and": [
+                                    {"$eq": ["$category.type", "savings"]},
+                                    {"$eq": ["$items.owner_slot", "shared"]}
+                                ]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    },
+                    "monthly_fun_savings": {
+                        "$sum": {
+                            "$cond": [
+                                {"$eq": ["$category.type", "fun"]},
+                                "$items.amount",
+                                0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+        monthly_result = await budgets_collection.aggregate(monthly_pipeline).to_list(length=1)
+        monthly_shared = monthly_result[0]["monthly_shared_savings"] if monthly_result else 0
+        monthly_fun = monthly_result[0]["monthly_fun_savings"] if monthly_result else 0
+
+        # 4. Distribute lifetime savings hierarchically across goals (same logic as frontend)
+        def distribute_savings(goal_list: list, available: float) -> list:
+            remaining = available
+            result = []
+            for g in goal_list:
+                target = g.get("target_amount", 0)
+                saved = min(remaining, target)
+                remaining = max(0, remaining - saved)
+                result.append({
+                    "name": g.get("name", "Unnamed"),
+                    "target": target,
+                    "saved": round(saved, 2),
+                    "remaining": round(max(target - saved, 0), 2),
+                    "progress_pct": round((saved / target * 100) if target > 0 else 0, 1),
+                    "completed": saved >= target,
+                    "priority": g.get("priority", 0),
+                    "type": g.get("type", "shared"),
+                    "description": g.get("description", ""),
+                })
+            return result
+
+        shared_goals = sorted(
+            [g for g in all_goals if g.get("type", "shared") == "shared"],
+            key=lambda g: g.get("priority", 0)
+        )
+        fun_goals = sorted(
+            [g for g in all_goals if g.get("type") == "fun"],
+            key=lambda g: g.get("priority", 0)
+        )
+
+        goals_data = distribute_savings(shared_goals, lifetime_shared) + distribute_savings(fun_goals, lifetime_fun)
+
+        return {
+            "ok": True,
+            "data": {
+                "currency": "DKK",
+                "goals": goals_data,
+                "lifetime_shared_savings": round(lifetime_shared, 2),
+                "lifetime_fun_savings": round(lifetime_fun, 2),
+                "monthly_shared_savings": round(monthly_shared, 2),
+                "monthly_fun_savings": round(monthly_fun, 2),
+                "month_used_for_rate": month,
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "GOALS_SUMMARY_ERROR"}

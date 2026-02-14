@@ -37,6 +37,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Tabs from "@/components/Tabs";
 import GoalItemsInput, { GoalItem as GoalItemType } from "@/components/GoalItemsInput";
 import ConfirmationDialog from "@/components/ConfirmationDialog";
+import AIChat from "@/components/AIChat";
 
 interface GoalItem {
   url?: string;
@@ -858,6 +859,9 @@ export default function Goals() {
         cancelText="Cancel"
         variant="destructive"
       />
+
+      {/* AI Chat Widget */}
+      <AIChat initialMessage="Hi! I'm your PocketFlow AI assistant. I can help you with your savings goals — ask me things like 'How long will it take to reach my goal if I save the same amount as this month every month?'" />
     </div>
   );
 }
