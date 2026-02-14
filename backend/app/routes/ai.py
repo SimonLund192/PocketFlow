@@ -38,7 +38,9 @@ async def get_optional_user_id(authorization: Optional[str] = Header(None)) -> s
         # Get the actual user_id from the database
         from app.database import database
         users_collection = database["users"]
-        user = await users_collection.find_one({"email": user_email})
+        # Normalize email to lowercase for case-insensitive lookup
+        normalized_email = user_email.strip().lower()
+        user = await users_collection.find_one({"email": normalized_email})
         
         if user:
             return str(user["_id"])

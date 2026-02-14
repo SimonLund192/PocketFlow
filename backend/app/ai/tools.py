@@ -128,6 +128,7 @@ async def get_budget_summary(user_id: str, **kwargs) -> Dict[str, Any]:
                 "ok": True,
                 "data": {
                     "month": month,
+                    "currency": "DKK",
                     "total_income": 0,
                     "total_expenses": 0,
                     "total_savings": 0,
@@ -167,6 +168,7 @@ async def get_budget_summary(user_id: str, **kwargs) -> Dict[str, Any]:
             "ok": True,
             "data": {
                 "month": month,
+                "currency": "DKK",
                 "total_income": total_income,
                 "total_expenses": total_expenses,
                 "total_savings": total_savings,
@@ -189,7 +191,7 @@ async def get_income_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
         })
         
         if not budget:
-            return {"ok": True, "data": {"month": month, "income_items": [], "total": 0}}
+            return {"ok": True, "data": {"month": month, "currency": "DKK", "income_items": [], "total": 0}}
         
         budget_id = budget["_id"]
         income_items = []
@@ -212,6 +214,7 @@ async def get_income_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
             "ok": True,
             "data": {
                 "month": month,
+                "currency": "DKK",
                 "income_items": income_items,
                 "total": total
             }
@@ -231,7 +234,7 @@ async def get_expense_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
         })
         
         if not budget:
-            return {"ok": True, "data": {"month": month, "expense_items": [], "total": 0}}
+            return {"ok": True, "data": {"month": month, "currency": "DKK", "expense_items": [], "total": 0}}
         
         budget_id = budget["_id"]
         expense_items = []
@@ -254,6 +257,7 @@ async def get_expense_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
             "ok": True,
             "data": {
                 "month": month,
+                "currency": "DKK",
                 "expense_items": expense_items,
                 "total": total
             }
@@ -273,7 +277,7 @@ async def get_savings_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
         })
         
         if not budget:
-            return {"ok": True, "data": {"month": month, "savings_items": [], "fun_items": [], "total": 0}}
+            return {"ok": True, "data": {"month": month, "currency": "DKK", "savings_items": [], "fun_items": [], "total": 0}}
         
         budget_id = budget["_id"]
         savings_items = []
@@ -303,6 +307,7 @@ async def get_savings_breakdown(user_id: str, **kwargs) -> Dict[str, Any]:
             "ok": True,
             "data": {
                 "month": month,
+                "currency": "DKK",
                 "savings_items": savings_items,
                 "fun_items": fun_items,
                 "total": total
@@ -377,6 +382,7 @@ async def get_lifetime_savings(user_id: str, **kwargs) -> Dict[str, Any]:
         return {
             "ok": True,
             "data": {
+                "currency": "DKK",
                 "lifetime_shared_savings": shared_savings,
                 "lifetime_fun_savings": fun_savings,
                 "lifetime_total_savings": total_savings

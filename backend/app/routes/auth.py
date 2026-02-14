@@ -32,8 +32,11 @@ async def register(user_data: UserRegister):
     db = await get_database()
     users_collection = db["users"]
     
+    # Normalize email to lowercase to prevent duplicate accounts from casing
+    normalized_email = user_data.email.strip().lower()
+    
     # Check if user already exists
-    existing_user = await users_collection.find_one({"email": user_data.email})
+    existing_user = await users_collection.find_one({"email": normalized_email})
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -45,7 +48,7 @@ async def register(user_data: UserRegister):
     
     # Create user document
     user_doc = {
-        "email": user_data.email,
+        "email": normalized_email,
         "full_name": user_data.full_name,
         "hashed_password": hashed_password,
         "created_at": None,  # Will be set by MongoDB
@@ -58,7 +61,7 @@ async def register(user_data: UserRegister):
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_data.email}, expires_delta=access_token_expires
+        data={"sub": normalized_email}, expires_delta=access_token_expires
     )
     
     # Return token and user info
@@ -67,7 +70,7 @@ async def register(user_data: UserRegister):
         token_type="bearer",
         user={
             "id": str(result.inserted_id),
-            "email": user_data.email,
+            "email": normalized_email,
             "full_name": user_data.full_name
         }
     )
@@ -78,8 +81,11 @@ async def login(user_data: UserLogin):
     db = await get_database()
     users_collection = db["users"]
     
+    # Normalize email to lowercase for case-insensitive lookup
+    normalized_email = user_data.email.strip().lower()
+    
     # Find user
-    user = await users_collection.find_one({"email": user_data.email})
+    user = await users_collection.find_one({"email": normalized_email})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -103,7 +109,7 @@ async def login(user_data: UserLogin):
     # Create access token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user_data.email}, expires_delta=access_token_expires
+        data={"sub": normalized_email}, expires_delta=access_token_expires
     )
     
     # Return token and user info
