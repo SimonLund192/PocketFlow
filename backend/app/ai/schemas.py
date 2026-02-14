@@ -14,11 +14,29 @@ class AIChatRequest(BaseModel):
     messages: List[AIChatMessage]
     session_id: Optional[str] = None
     dry_run: bool = False
+    confirm_action: Optional[str] = None  # "yes" or "no" — user's response to a pending action
+
+class ProposedEntry(BaseModel):
+    """A single budget line item proposed by the AI for confirmation"""
+    name: str = Field(..., description="Line item name (e.g. 'Milk, butter, bread')")
+    category_name: str = Field(..., description="Category name to use")
+    category_id: str = Field(..., description="Category ObjectId")
+    category_type: str = Field(..., description="Category type: income, expense, savings, fun")
+    amount: float = Field(..., ge=0, description="Amount in DKK")
+    owner_slot: Literal["user1", "user2", "shared"] = Field(..., description="Owner slot")
+    month: str = Field(..., description="Budget month YYYY-MM")
+
+class PendingAction(BaseModel):
+    """Action waiting for user confirmation"""
+    action_type: str = Field(..., description="Type: 'save_budget_entries'")
+    entries: List[ProposedEntry] = []
+    summary: str = Field("", description="Human-readable summary of what will be saved")
 
 class AIChatResponse(BaseModel):
     message: AIChatMessage
     tool_calls: List[Dict[str, Any]] = []
     warnings: List[str] = []
+    pending_action: Optional[PendingAction] = None  # Set when AI proposes entries for confirmation
 
 # --- Tool Argument Schemas ---
 
