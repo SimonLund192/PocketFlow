@@ -157,8 +157,63 @@ class TestBudgetAPI:
                 "/api/budgets/by-month/2026-01",
                 headers=auth_headers
             )
-        
+
         assert response.status_code == 404
+
+    async def test_initialize_budget_month_copy_previous(
+        self,
+        async_client: AsyncClient,
+        db_session,
+        mock_user_id,
+        auth_headers,
+    ):
+        """Test initializing a month by copying the latest previous budget."""
+        from app.database import categories_collection, budgets_collection, budget_line_items_collection
+        from datetime import datetime, timezone
+
+        category = {
+          "user_id": mock_user_id,
+          "name": "Salary",
+          "type": "income",
+          "icon": "wallet",
+          "color": "#22C55E",
+          "created_at": datetime.now(timezone.utc),
+          "updated_at": datetime.now(timezone.utc),
+        }
+        category_result = await categories_collection.insert_one(category)
+
+        source_budget_result = await budgets_collection.insert_one({
+          "user_id": mock_user_id,
+          "month": "2026-02",
+          "created_at": datetime.now(timezone.utc),
+          "updated_at": datetime.now(timezone.utc),
+        })
+
+        await budget_line_items_collection.insert_one({
+          "user_id": mock_user_id,
+          "budget_id": source_budget_result.inserted_id,
+          "name": "Primary salary",
+          "category_id": category_result.inserted_id,
+          "amount": 32000,
+          "owner_slot": "user1",
+          "created_at": datetime.now(timezone.utc),
+          "updated_at": datetime.now(timezone.utc),
+        })
+
+        with patch("app.routes.budgets.get_current_user_id", return_value=mock_user_id):
+            response = await async_client.post(
+                "/api/budgets/initialize",
+                json={"month": "2026-03", "mode": "copy_previous"},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["budget"]["month"] == "2026-03"
+        assert data["source_budget_month"] == "2026-02"
+        assert len(data["rows"]) == 1
+        assert data["rows"][0]["name"] == "Primary salary"
+        assert data["rows"][0]["source"] == "copied"
 
     async def test_update_budget_success(self, async_client: AsyncClient, db_session, mock_user_id, auth_headers):
         """Test successful budget update"""
@@ -281,7 +336,7 @@ class TestBudgetAPI:
         })
         assert count_after == 0
 
-    async def test_user_isolation(self, async_client: AsyncClient, db_session, auth_headers):
+    async def test_user_isolation(self, async_client: AsyncClient, db_session, auth_headers, auth_override):
         """Test that users cannot access each other's budgets"""
         user1_id = "user_1"
         user2_id = "user_2"
@@ -290,20 +345,19 @@ class TestBudgetAPI:
         budget1 = await BudgetService.create_budget(user1_id, BudgetCreate(month="2026-01"))
         
         # User 2 tries to get user 1's budget
-        with patch("app.routes.budgets.get_current_user_id", return_value=user2_id):
-            response = await async_client.get(
-                f"/api/budgets/{budget1.id}",
-                headers=auth_headers
-            )
+        auth_override["user_id"] = user2_id
+        response = await async_client.get(
+            f"/api/budgets/{budget1.id}",
+            headers=auth_headers
+        )
         
         assert response.status_code == 404  # Should not find it
         
         # User 2 should only see their own budgets
-        with patch("app.routes.budgets.get_current_user_id", return_value=user2_id):
-            response = await async_client.get(
-                "/api/budgets/",
-                headers=auth_headers
-            )
+        response = await async_client.get(
+            "/api/budgets/",
+            headers=auth_headers
+        )
         
         assert response.status_code == 200
         assert len(response.json()) == 0  # User 2 has no budgets

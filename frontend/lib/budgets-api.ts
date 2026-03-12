@@ -1,5 +1,6 @@
 // budgets-api.ts
 // API client for budget operations
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -20,22 +21,31 @@ export interface BudgetUpdate {
   month?: string;
 }
 
-// Helper to get auth token
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
+export interface InitializeBudgetMonthRequest {
+  month: string;
+  mode: "empty" | "copy_previous";
 }
 
-// Helper to build headers
-function buildHeaders(): HeadersInit {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-  const token = getAuthToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
+export interface InitializeBudgetMonthResponse {
+  budget: Budget;
+  rows: Array<{
+    id?: string;
+    name: string;
+    category_id: string;
+    amount: number;
+    owner_slot: "user1" | "user2" | "shared";
+    include: boolean;
+    source: "existing" | "manual" | "ai" | "import" | "copied";
+    needs_review: boolean;
+    category?: {
+      id: string;
+      name: string;
+      type: "income" | "expense" | "savings" | "fun";
+      icon: string;
+      color: string;
+    };
+  }>;
+  source_budget_month?: string | null;
 }
 
 /**
@@ -44,13 +54,10 @@ function buildHeaders(): HeadersInit {
 export async function getBudgets(): Promise<Budget[]> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budgets: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budgets: ${response.statusText}`);
 
   return response.json();
 }
@@ -61,13 +68,10 @@ export async function getBudgets(): Promise<Budget[]> {
 export async function getBudgetByMonth(month: string): Promise<Budget> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/by-month/${month}`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budget for ${month}: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budget for ${month}: ${response.statusText}`);
 
   return response.json();
 }
@@ -78,13 +82,10 @@ export async function getBudgetByMonth(month: string): Promise<Budget> {
 export async function getBudget(id: string): Promise<Budget> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/${id}`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budget: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budget: ${response.statusText}`);
 
   return response.json();
 }
@@ -95,14 +96,11 @@ export async function getBudget(id: string): Promise<Budget> {
 export async function createBudget(data: BudgetCreate): Promise<Budget> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/`, {
     method: 'POST',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to create budget: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to create budget: ${response.statusText}`);
 
   return response.json();
 }
@@ -113,14 +111,11 @@ export async function createBudget(data: BudgetCreate): Promise<Budget> {
 export async function updateBudget(id: string, data: BudgetUpdate): Promise<Budget> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/${id}`, {
     method: 'PUT',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to update budget: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to update budget: ${response.statusText}`);
 
   return response.json();
 }
@@ -131,13 +126,10 @@ export async function updateBudget(id: string, data: BudgetUpdate): Promise<Budg
 export async function deleteBudget(id: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/budgets/${id}`, {
     method: 'DELETE',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to delete budget: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to delete budget: ${response.statusText}`);
 }
 
 /**
@@ -152,4 +144,18 @@ export async function getOrCreateBudget(month: string): Promise<Budget> {
     // If not found, create new budget
     return await createBudget({ month });
   }
+}
+
+export async function initializeBudgetMonth(
+  data: InitializeBudgetMonthRequest,
+): Promise<InitializeBudgetMonthResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/budgets/initialize`, {
+    method: "POST",
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  await throwIfUnauthorized(response, `Failed to initialize budget month: ${response.statusText}`);
+
+  return response.json();
 }

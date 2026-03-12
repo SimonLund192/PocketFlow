@@ -1,5 +1,6 @@
 // import-api.ts
 // API client for CSV bank statement import operations
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -45,25 +46,6 @@ export interface ConfirmResponse {
   errors: string[];
 }
 
-// ---------- Helpers ----------
-
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
-}
-
-function buildHeaders(json = true): HeadersInit {
-  const headers: Record<string, string> = {};
-  if (json) {
-    headers['Content-Type'] = 'application/json';
-  }
-  const token = getAuthToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
-
 // ---------- API calls ----------
 
 /**
@@ -75,14 +57,11 @@ export async function uploadCSVFile(file: File): Promise<UploadResponse> {
 
   const response = await fetch(`${API_BASE_URL}/api/import/upload`, {
     method: 'POST',
-    headers: buildHeaders(false), // no Content-Type — browser sets multipart boundary
+    headers: buildAuthHeaders(false),
     body: formData,
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Upload failed' }));
-    throw new Error(err.detail || 'Upload failed');
-  }
+  await throwIfUnauthorized(response, 'Upload failed');
   return response.json();
 }
 
@@ -92,14 +71,11 @@ export async function uploadCSVFile(file: File): Promise<UploadResponse> {
 export async function uploadCSVText(csvContent: string): Promise<UploadResponse> {
   const response = await fetch(`${API_BASE_URL}/api/import/upload-text`, {
     method: 'POST',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify({ csv_content: csvContent }),
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Upload failed' }));
-    throw new Error(err.detail || 'Upload failed');
-  }
+  await throwIfUnauthorized(response, 'Upload failed');
   return response.json();
 }
 
@@ -109,13 +85,10 @@ export async function uploadCSVText(csvContent: string): Promise<UploadResponse>
 export async function getImportCategories(): Promise<CategoryOption[]> {
   const response = await fetch(`${API_BASE_URL}/api/import/categories`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Failed to fetch categories' }));
-    throw new Error(err.detail || 'Failed to fetch categories');
-  }
+  await throwIfUnauthorized(response, 'Failed to fetch categories');
   return response.json();
 }
 
@@ -128,13 +101,10 @@ export async function confirmImport(
 ): Promise<ConfirmResponse> {
   const response = await fetch(`${API_BASE_URL}/api/import/confirm`, {
     method: 'POST',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify({ month, entries }),
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: 'Import failed' }));
-    throw new Error(err.detail || 'Import failed');
-  }
+  await throwIfUnauthorized(response, 'Import failed');
   return response.json();
 }

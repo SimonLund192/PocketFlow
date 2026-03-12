@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8000";
+import { buildAuthHeaders, getStoredToken, throwIfUnauthorized } from "@/lib/session";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface UserProfile {
   id: string;
@@ -14,37 +16,28 @@ export interface UserUpdate {
 
 export const authApi = {
   getProfile: async (): Promise<UserProfile> => {
-    const token = localStorage.getItem("token");
+    const token = getStoredToken();
     if (!token) throw new Error("No token found");
 
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildAuthHeaders(false),
     });
 
-    if (!response.ok) {
-        throw new Error("Failed to fetch profile");
-    }
+    await throwIfUnauthorized(response, "Failed to fetch profile");
     return response.json();
   },
 
   updateProfile: async (data: UserUpdate): Promise<UserProfile> => {
-    const token = localStorage.getItem("token");
+    const token = getStoredToken();
     if (!token) throw new Error("No token found");
 
     const response = await fetch(`${API_BASE_URL}/auth/me`, {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: buildAuthHeaders(),
       body: JSON.stringify(data),
     });
 
-    if (!response.ok) {
-        throw new Error("Failed to update profile");
-    }
+    await throwIfUnauthorized(response, "Failed to update profile");
     return response.json();
   },
 };

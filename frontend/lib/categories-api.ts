@@ -1,4 +1,6 @@
-const API_BASE_URL = "http://localhost:8000";
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface Category {
   id: string;  // Backend returns 'id', not '_id'
@@ -23,62 +25,54 @@ export interface CategoryUpdate {
   color?: string;
 }
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    "Content-Type": "application/json",
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
-
 export const categoriesApi = {
   getAll: async (): Promise<Category[]> => {
     const response = await fetch(`${API_BASE_URL}/api/categories/`, {
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to fetch categories");
+    await throwIfUnauthorized(response, "Failed to fetch categories");
     return response.json();
   },
 
   create: async (category: CategoryCreate): Promise<Category> => {
     const response = await fetch(`${API_BASE_URL}/api/categories/`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(category),
     });
-    if (!response.ok) throw new Error("Failed to create category");
+    await throwIfUnauthorized(response, "Failed to create category");
     return response.json();
   },
 
   update: async (id: string, category: CategoryUpdate): Promise<Category> => {
     const response = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
       method: "PUT",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify(category),
     });
-    if (!response.ok) throw new Error("Failed to update category");
+    await throwIfUnauthorized(response, "Failed to update category");
     return response.json();
   },
 
   delete: async (id: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/categories/${id}`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to delete category");
+    await throwIfUnauthorized(response, "Failed to delete category");
   },
 
   seedDefaults: async (): Promise<{ message: string; inserted: number; skipped: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/categories/seed-defaults`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to seed default categories");
+    await throwIfUnauthorized(response, "Failed to seed default categories");
     return response.json();
   },
 };

@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from typing import List, Optional
-from app.models import BudgetCreate, BudgetUpdate, BudgetResponse
+from app.models import (
+    BudgetCreate,
+    BudgetUpdate,
+    BudgetResponse,
+    InitializeBudgetMonthRequest,
+    InitializeBudgetMonthResponse,
+)
 from app.dependencies import get_current_user_id
 from app.services.budget_service import BudgetService
 
@@ -91,6 +97,29 @@ async def get_budget_by_month(
         )
     
     return budget
+
+
+@router.post("/initialize", response_model=InitializeBudgetMonthResponse)
+async def initialize_budget_month(
+    body: InitializeBudgetMonthRequest,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Initialize a month for draft editing.
+
+    - `empty`: ensure the budget exists and return no starter rows
+    - `copy_previous`: seed the month from the most recent previous budget if empty
+    """
+    budget, rows, source_budget_month = await BudgetService.initialize_budget_month(
+        user_id=user_id,
+        month=body.month,
+        mode=body.mode,
+    )
+    return InitializeBudgetMonthResponse(
+        budget=budget,
+        rows=rows,
+        source_budget_month=source_budget_month,
+    )
 
 
 @router.put("/{budget_id}", response_model=BudgetResponse)

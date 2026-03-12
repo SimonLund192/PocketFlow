@@ -25,6 +25,8 @@ class ProposedEntry(BaseModel):
     amount: float = Field(..., ge=0, description="Amount in DKK")
     owner_slot: Literal["user1", "user2", "shared"] = Field(..., description="Owner slot")
     month: str = Field(..., description="Budget month YYYY-MM")
+    source: Literal["ai"] = Field(default="ai", description="Entry source")
+    needs_review: bool = Field(default=True, description="Whether the row still needs inline review")
 
 class PendingAction(BaseModel):
     """Action waiting for user confirmation"""
@@ -58,4 +60,3 @@ class DeleteTransactionArgs(BaseModel):
 
 class GetDashboardStatsArgs(BaseModel):
     pass # No args needed
-

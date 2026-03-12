@@ -189,6 +189,91 @@ class TestBudgetLineItemsAPI:
         assert response.json() == []
 
     @patch("app.dependencies.get_current_user_id")
+    async def test_save_budget_draft_upserts_and_deletes(
+        self,
+        mock_get_user,
+        async_client,
+        db_session,
+        test_user_id,
+        sample_budget,
+        sample_category,
+    ):
+        """Test batch saving a draft review payload."""
+        mock_get_user.return_value = test_user_id
+
+        existing = await budget_line_items_collection.insert_one({
+            "user_id": test_user_id,
+            "budget_id": sample_budget["_id"],
+            "name": "Old rent",
+            "category_id": sample_category["_id"],
+            "amount": 1000.0,
+            "owner_slot": "shared",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        })
+
+        response = await async_client.put(
+            "/api/budget-line-items/draft",
+            json={
+                "month": "2026-01",
+                "rows": [
+                    {
+                        "id": str(existing.inserted_id),
+                        "name": "Updated rent",
+                        "category_id": str(sample_category["_id"]),
+                        "amount": 1500.0,
+                        "owner_slot": "shared",
+                        "include": True,
+                        "source": "manual",
+                        "needs_review": False,
+                    },
+                    {
+                        "name": "Groceries",
+                        "category_id": str(sample_category["_id"]),
+                        "amount": 750.0,
+                        "owner_slot": "user1",
+                        "include": True,
+                        "source": "import",
+                        "needs_review": False,
+                    },
+                ],
+                "deleted_ids": [],
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["rows"]) == 2
+        names = {row["name"] for row in data["rows"]}
+        assert names == {"Updated rent", "Groceries"}
+
+        delete_response = await async_client.put(
+            "/api/budget-line-items/draft",
+            json={
+                "month": "2026-01",
+                "rows": [
+                    {
+                        "id": next(row["id"] for row in data["rows"] if row["name"] == "Updated rent"),
+                        "name": "Updated rent",
+                        "category_id": str(sample_category["_id"]),
+                        "amount": 1500.0,
+                        "owner_slot": "shared",
+                        "include": True,
+                        "source": "existing",
+                        "needs_review": False,
+                    }
+                ],
+                "deleted_ids": [next(row["id"] for row in data["rows"] if row["name"] == "Groceries")],
+            },
+        )
+
+        assert delete_response.status_code == 200
+        delete_data = delete_response.json()
+        assert len(delete_data["rows"]) == 1
+        assert delete_data["rows"][0]["name"] == "Updated rent"
+        assert len(delete_data["removed_ids"]) == 1
+
+    @patch("app.dependencies.get_current_user_id")
     async def test_get_line_items_multiple(
         self,
         mock_get_user,

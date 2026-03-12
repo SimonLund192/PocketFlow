@@ -1,51 +1,45 @@
-const API_BASE_URL = "http://localhost:8000";
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return {
-    "Content-Type": "application/json",
-    ...(token && { Authorization: `Bearer ${token}` }),
-  };
-};
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export const adminApi = {
   clearTransactions: async (): Promise<{ message: string; deleted_count: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/clear-transactions`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to clear transactions");
+    await throwIfUnauthorized(response, "Failed to clear transactions");
     return response.json();
   },
 
   clearBudgets: async (): Promise<{ message: string; budgets_deleted: number; line_items_deleted: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/clear-budgets`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to clear budgets");
+    await throwIfUnauthorized(response, "Failed to clear budgets");
     return response.json();
   },
 
   clearCategories: async (): Promise<{ message: string; deleted_count: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/clear-categories`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to clear categories");
+    await throwIfUnauthorized(response, "Failed to clear categories");
     return response.json();
   },
 
   clearGoals: async (): Promise<{ message: string; deleted_count: number }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/clear-goals`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to clear goals");
+    await throwIfUnauthorized(response, "Failed to clear goals");
     return response.json();
   },
 
@@ -60,10 +54,10 @@ export const adminApi = {
   }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/clear-all`, {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to clear all data");
+    await throwIfUnauthorized(response, "Failed to clear all data");
     return response.json();
   },
 
@@ -76,10 +70,10 @@ export const adminApi = {
   }> => {
     const response = await fetch(`${API_BASE_URL}/api/admin/migrate-category-icons`, {
       method: "POST",
-      headers: getAuthHeaders(),
+      headers: buildAuthHeaders(),
       credentials: 'include',
     });
-    if (!response.ok) throw new Error("Failed to migrate category icons");
+    await throwIfUnauthorized(response, "Failed to migrate category icons");
     return response.json();
   },
 };

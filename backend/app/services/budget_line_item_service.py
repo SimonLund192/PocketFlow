@@ -6,7 +6,7 @@ Handles business logic, validation, and database operations for budget line item
 
 from bson import ObjectId
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union, List
 
 from app.database import budget_line_items_collection, budgets_collection, categories_collection
 from app.models import (
@@ -15,8 +15,13 @@ from app.models import (
     BudgetLineItemInDB,
     BudgetLineItemResponse,
     BudgetLineItemWithCategory,
+    BudgetDraftRow,
+    BudgetDraftRowResponse,
+    SaveBudgetDraftRequest,
+    SaveBudgetDraftResponse,
     CategoryResponse,
 )
+from app.services.budget_service import BudgetService
 
 
 class BudgetLineItemService:
@@ -101,7 +106,7 @@ class BudgetLineItemService:
         user_id: str,
         budget_id: Optional[str] = None,
         include_category: bool = False
-    ) -> list[BudgetLineItemResponse] | list[BudgetLineItemWithCategory]:
+    ) -> Union[List[BudgetLineItemResponse], List[BudgetLineItemWithCategory]]:
         """
         Get all line items for the logged-in user, optionally filtered by budget.
 
@@ -183,7 +188,7 @@ class BudgetLineItemService:
         line_item_id: str,
         user_id: str,
         include_category: bool = False
-    ) -> Optional[BudgetLineItemResponse] | Optional[BudgetLineItemWithCategory]:
+    ) -> Union[Optional[BudgetLineItemResponse], Optional[BudgetLineItemWithCategory]]:
         """
         Get a single line item by ID.
 
@@ -369,3 +374,107 @@ class BudgetLineItemService:
             budget_id=budget_id,
             include_category=include_category
         )
+
+    @staticmethod
+    async def save_budget_draft(
+        user_id: str,
+        draft_data: SaveBudgetDraftRequest,
+    ) -> SaveBudgetDraftResponse:
+        """Persist a full draft review state in one request."""
+        budget = await BudgetService.ensure_budget(user_id, draft_data.month)
+        budget_id_obj = ObjectId(budget.id)
+
+        rows_to_save = [row for row in draft_data.rows if row.include]
+
+        category_ids = {
+            row.category_id
+            for row in rows_to_save
+            if row.category_id and ObjectId.is_valid(row.category_id)
+        }
+        category_docs = {}
+        if category_ids:
+            cursor = categories_collection.find({
+                "_id": {"$in": [ObjectId(category_id) for category_id in category_ids]},
+                "user_id": user_id,
+            })
+            async for category in cursor:
+                category_docs[str(category["_id"])] = category
+
+        now = datetime.now(timezone.utc)
+        removed_ids: list[str] = []
+
+        for deleted_id in draft_data.deleted_ids:
+            if not ObjectId.is_valid(deleted_id):
+                continue
+            result = await budget_line_items_collection.delete_one({
+                "_id": ObjectId(deleted_id),
+                "user_id": user_id,
+                "budget_id": budget_id_obj,
+            })
+            if result.deleted_count:
+                removed_ids.append(deleted_id)
+
+        for row in rows_to_save:
+            BudgetLineItemService._validate_draft_row(row, category_docs)
+
+            payload = {
+                "name": row.name.strip(),
+                "category_id": ObjectId(row.category_id),
+                "amount": row.amount,
+                "owner_slot": row.owner_slot,
+                "updated_at": now,
+            }
+
+            if row.id and ObjectId.is_valid(row.id):
+                existing = await budget_line_items_collection.find_one({
+                    "_id": ObjectId(row.id),
+                    "user_id": user_id,
+                    "budget_id": budget_id_obj,
+                })
+                if existing:
+                    await budget_line_items_collection.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": payload},
+                    )
+                    continue
+
+            payload.update({
+                "user_id": user_id,
+                "budget_id": budget_id_obj,
+                "created_at": now,
+            })
+            await budget_line_items_collection.insert_one(payload)
+
+        refreshed_budget = await BudgetService.ensure_budget(user_id, draft_data.month)
+        refreshed_rows = await BudgetService._draft_rows_from_items(
+            await budget_line_items_collection.find({
+                "user_id": user_id,
+                "budget_id": ObjectId(refreshed_budget.id),
+            }).sort("created_at", 1).to_list(length=None),
+            user_id,
+            "existing",
+        )
+
+        return SaveBudgetDraftResponse(
+            budget=refreshed_budget,
+            rows=refreshed_rows,
+            removed_ids=removed_ids,
+        )
+
+    @staticmethod
+    def _validate_draft_row(row: BudgetDraftRow, category_docs: dict[str, dict]) -> None:
+        """Validate editable draft rows before save."""
+        if not row.name.strip():
+            raise ValueError("Each included row must have a name")
+        if row.amount <= 0:
+            raise ValueError(f"Amount must be positive for '{row.name or 'Unnamed'}'")
+        if row.owner_slot not in ("user1", "user2", "shared"):
+            raise ValueError(f"Invalid owner for '{row.name or 'Unnamed'}'")
+        if not row.category_id or not ObjectId.is_valid(row.category_id):
+            raise ValueError(f"Missing or invalid category for '{row.name or 'Unnamed'}'")
+
+        category = category_docs.get(row.category_id)
+        if not category:
+            raise ValueError(f"Category not found for '{row.name or 'Unnamed'}'")
+        if not category.get("is_active", True):
+            raise ValueError(f"Cannot use inactive category for '{row.name or 'Unnamed'}'")

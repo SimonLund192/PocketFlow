@@ -6,6 +6,7 @@ import ConditionalAISidebar from "@/components/ConditionalAISidebar";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { MonthProvider } from "@/contexts/MonthContext";
 import { AISidebarProvider } from "@/contexts/AISidebarContext";
+import { BudgetDraftProvider } from "@/contexts/BudgetDraftContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,15 +25,17 @@ export default function RootLayout({
       <body className={`${inter.className} h-full m-0 p-0`}>
         <AuthProvider>
           <MonthProvider>
-            <AISidebarProvider>
-              <div className="flex h-full bg-gray-50">
-                <ConditionalSidebar />
-                <main className="flex-1 overflow-y-scroll transition-all duration-300 ease-in-out">
-                  {children}
-                </main>
-                <ConditionalAISidebar />
-              </div>
-            </AISidebarProvider>
+            <BudgetDraftProvider>
+              <AISidebarProvider>
+                <div className="flex h-full bg-gray-50">
+                  <ConditionalSidebar />
+                  <main className="flex-1 overflow-y-scroll transition-all duration-300 ease-in-out">
+                    {children}
+                  </main>
+                  <ConditionalAISidebar />
+                </div>
+              </AISidebarProvider>
+            </BudgetDraftProvider>
           </MonthProvider>
         </AuthProvider>
       </body>
