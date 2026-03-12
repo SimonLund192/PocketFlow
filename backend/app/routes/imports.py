@@ -22,6 +22,10 @@ class ParsedRow(BaseModel):
     category_id: Optional[str] = None
     owner_slot: Literal["user1", "user2", "shared"] = "user1"
     include: bool = True
+    suggestion_confidence: Optional[float] = None
+    suggestion_basis: Optional[str] = None
+    matched_terms: List[str] = Field(default_factory=list)
+    matched_example: Optional[str] = None
 
 
 class UploadResponse(BaseModel):
@@ -63,7 +67,7 @@ class ConfirmResponse(BaseModel):
 @router.post("/upload", response_model=UploadResponse)
 async def upload_csv(
     file: UploadFile = File(...),
-    _user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Upload a CSV bank statement file.
@@ -85,6 +89,7 @@ async def upload_csv(
             csv_text = content.decode("latin-1")
 
         result = ImportService.parse_csv(csv_text)
+        result["rows"] = await ImportService.apply_historical_suggestions(user_id, result["rows"])
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -95,7 +100,7 @@ async def upload_csv(
 @router.post("/upload-text", response_model=UploadResponse)
 async def upload_csv_text(
     body: dict,
-    _user_id: str = Depends(get_current_user_id),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     Upload CSV content as raw text (for paste-from-clipboard support).
@@ -106,6 +111,7 @@ async def upload_csv_text(
 
     try:
         result = ImportService.parse_csv(csv_content)
+        result["rows"] = await ImportService.apply_historical_suggestions(user_id, result["rows"])
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

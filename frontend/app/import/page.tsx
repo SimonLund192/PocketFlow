@@ -23,18 +23,22 @@ export default function ImportPage() {
   const [pasteContent, setPasteContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   const routeRowsToBudget = async (rows: Awaited<ReturnType<typeof uploadCSVText>>["rows"]) => {
+    const suggestedCount = rows.filter((row) => !!row.category_id).length;
+
     mergeRows(
       targetMonth,
       rows.map((row) =>
         makeDraftRow({
           name: row.description || "Imported item",
           amount: row.abs_amount || "",
-          owner_slot: "user1",
+          category_id: row.category_id || "",
+          owner_slot: row.owner_slot || "user1",
           include: true,
           source: "import",
-          needs_review: true,
+          needs_review: !row.category_id,
         }),
       ),
     );
@@ -42,6 +46,11 @@ export default function ImportPage() {
     hydrateMonth(targetMonth, {
       initialized: true,
     });
+    setInfo(
+      suggestedCount > 0
+        ? `Matched ${suggestedCount} imported row${suggestedCount === 1 ? "" : "s"} from your previous categorized budget history.`
+        : "Imported rows are ready for review in the budget draft table.",
+    );
     setSelectedMonth(targetMonth);
     router.push("/budget");
   };
@@ -51,6 +60,7 @@ export default function ImportPage() {
     if (!file) return;
 
     setError(null);
+    setInfo(null);
     setLoading(true);
 
     try {
@@ -67,6 +77,7 @@ export default function ImportPage() {
   const handlePasteImport = async () => {
     if (!pasteContent.trim()) return;
     setError(null);
+    setInfo(null);
     setLoading(true);
 
     try {
@@ -91,6 +102,12 @@ export default function ImportPage() {
           <Card className="p-4 border-red-200 bg-red-50 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
             <p className="text-sm text-red-700">{error}</p>
+          </Card>
+        )}
+
+        {info && (
+          <Card className="p-4 border-green-200 bg-green-50">
+            <p className="text-sm text-green-700">{info}</p>
           </Card>
         )}
 

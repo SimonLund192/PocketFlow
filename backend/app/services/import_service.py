@@ -8,6 +8,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from bson import ObjectId
+import unicodedata
+import re
+from collections import defaultdict
 
 from app.database import (
     categories_collection,
@@ -25,6 +28,14 @@ class ImportService:
     DATE_KEYWORDS = ["date", "dato", "transaction date", "booking date", "bogført"]
     DESC_KEYWORDS = ["description", "text", "beskrivelse", "merchant", "tekst", "modtager"]
     AMOUNT_KEYWORDS = ["amount", "beløb", "sum", "value", "kr"]
+    MATCH_NOISE_TOKENS = {
+        "aps", "as", "ab", "dk", "dkk", "eur", "visa", "mastercard", "kort", "card",
+        "betaling", "payment", "konto", "kontonr", "overforsel", "overfoersel", "transfer",
+        "aut", "automatisk", "mobilepay", "mp", "pos", "purchase", "shop", "store", "web",
+        "butikk", "butik", "online", "subscription", "service", "services", "danmark",
+        "debit", "credit", "invoice", "regning", "betalinger", "terminal", "ref", "reference",
+        "betalingstjeneste", "giro", "pbs", "fi", "dd", "via", "the", "and",
+    }
 
     @staticmethod
     def _detect_delimiter(first_line: str) -> str:
@@ -48,6 +59,260 @@ class ImportService:
             return float(cleaned)
         except ValueError:
             return 0.0
+
+    @classmethod
+    def _normalize_description(cls, value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value.lower())
+        ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+        collapsed = re.sub(r"[^a-z0-9]+", " ", ascii_text)
+        return re.sub(r"\s+", " ", collapsed).strip()
+
+    @classmethod
+    def _meaningful_tokens(cls, value: str) -> List[str]:
+        normalized = cls._normalize_description(value)
+        tokens = []
+        for token in normalized.split():
+            if len(token) < 2:
+                continue
+            if token in cls.MATCH_NOISE_TOKENS:
+                continue
+            if token.isdigit() and len(token) < 4:
+                continue
+            tokens.append(token)
+        return tokens
+
+    @classmethod
+    def _candidate_phrases(cls, value: str) -> List[str]:
+        tokens = cls._meaningful_tokens(value)
+        phrases: List[str] = []
+        if not tokens:
+            return phrases
+
+        phrases.append(tokens[0])
+        if len(tokens) >= 2:
+            phrases.append(" ".join(tokens[:2]))
+        if len(tokens) >= 3 and tokens[1].isdigit():
+            phrases.append(" ".join(tokens[:3]))
+
+        deduped: List[str] = []
+        for phrase in phrases:
+            if phrase and phrase not in deduped:
+                deduped.append(phrase)
+        return deduped
+
+    @staticmethod
+    def _top_choice(counts: Dict[str, int]) -> Optional[Dict[str, float]]:
+        if not counts:
+            return None
+
+        ranked = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+        top_value, top_count = ranked[0]
+        total = sum(counts.values())
+        second_count = ranked[1][1] if len(ranked) > 1 else 0
+
+        return {
+            "value": top_value,
+            "count": top_count,
+            "total": total,
+            "ratio": top_count / total if total else 0,
+            "margin": top_count - second_count,
+        }
+
+    @classmethod
+    async def _historical_match_indexes(cls, user_id: str) -> Dict[str, Dict[str, Any]]:
+        cursor = budget_line_items_collection.find(
+            {"user_id": user_id},
+            {"name": 1, "category_id": 1, "owner_slot": 1},
+        )
+
+        exact_map: Dict[str, Dict[str, Any]] = {}
+        phrase_map: Dict[str, Dict[str, Any]] = {}
+        token_map: Dict[str, Dict[str, Any]] = {}
+
+        async for item in cursor:
+            category_id = item.get("category_id")
+            if not category_id:
+                continue
+
+            category_key = str(category_id)
+            name = item.get("name", "")
+            normalized = cls._normalize_description(name)
+            if not normalized:
+                continue
+
+            exact_entry = exact_map.setdefault(
+                normalized,
+                {"category_counts": defaultdict(int), "owner_counts": defaultdict(int), "examples": []},
+            )
+            exact_entry["category_counts"][category_key] += 1
+            exact_entry["owner_counts"][item.get("owner_slot", "user1")] += 1
+            if len(exact_entry["examples"]) < 3:
+                exact_entry["examples"].append(name)
+
+            seen_phrases = set()
+            for phrase in cls._candidate_phrases(name):
+                if phrase in seen_phrases:
+                    continue
+                seen_phrases.add(phrase)
+                phrase_entry = phrase_map.setdefault(
+                    phrase,
+                    {"category_counts": defaultdict(int), "owner_counts": defaultdict(int), "examples": []},
+                )
+                phrase_entry["category_counts"][category_key] += 1
+                phrase_entry["owner_counts"][item.get("owner_slot", "user1")] += 1
+                if len(phrase_entry["examples"]) < 3:
+                    phrase_entry["examples"].append(name)
+
+            seen_tokens = set()
+            for token in cls._meaningful_tokens(name):
+                if token in seen_tokens:
+                    continue
+                seen_tokens.add(token)
+                token_entry = token_map.setdefault(
+                    token,
+                    {"category_counts": defaultdict(int), "owner_counts": defaultdict(int), "examples": []},
+                )
+                token_entry["category_counts"][category_key] += 1
+                token_entry["owner_counts"][item.get("owner_slot", "user1")] += 1
+                if len(token_entry["examples"]) < 3:
+                    token_entry["examples"].append(name)
+
+        return {
+            "exact_map": exact_map,
+            "phrase_map": phrase_map,
+            "token_map": token_map,
+        }
+
+    @classmethod
+    def _suggest_mapping_for_description(
+        cls,
+        description: str,
+        indexes: Dict[str, Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        normalized = cls._normalize_description(description)
+        if not normalized:
+            return None
+
+        exact_entry = indexes["exact_map"].get(normalized)
+        if exact_entry:
+            top_category = cls._top_choice(dict(exact_entry["category_counts"]))
+            top_owner = cls._top_choice(dict(exact_entry["owner_counts"]))
+            if top_category and top_category["ratio"] >= 0.6:
+                confidence = min(0.99, 0.75 + (0.05 * top_category["count"]))
+                return {
+                    "category_id": top_category["value"],
+                    "owner_slot": top_owner["value"] if top_owner else "user1",
+                    "suggestion_confidence": round(confidence, 2),
+                    "suggestion_basis": "exact_history",
+                    "matched_terms": [normalized],
+                    "matched_example": exact_entry["examples"][0] if exact_entry["examples"] else description,
+                }
+
+        category_scores: Dict[str, float] = defaultdict(float)
+        owner_scores: Dict[tuple[str, str], float] = defaultdict(float)
+        matched_terms: List[str] = []
+        matched_examples: List[str] = []
+
+        for phrase in cls._candidate_phrases(description):
+            phrase_entry = indexes["phrase_map"].get(phrase)
+            if not phrase_entry:
+                continue
+
+            top_category = cls._top_choice(dict(phrase_entry["category_counts"]))
+            top_owner = cls._top_choice(dict(phrase_entry["owner_counts"]))
+            if not top_category or top_category["ratio"] < 0.75:
+                continue
+
+            score = 3.0 * top_category["ratio"] * min(top_category["count"], 3)
+            category_scores[top_category["value"]] += score
+            if top_owner:
+                owner_scores[(top_category["value"], top_owner["value"])] += score
+            matched_terms.append(phrase)
+            matched_examples.extend(phrase_entry["examples"][:1])
+
+        for token in cls._meaningful_tokens(description):
+            token_entry = indexes["token_map"].get(token)
+            if not token_entry:
+                continue
+
+            top_category = cls._top_choice(dict(token_entry["category_counts"]))
+            top_owner = cls._top_choice(dict(token_entry["owner_counts"]))
+            if not top_category:
+                continue
+
+            # Single strong merchant tokens like "netto" or "himmerland" should carry the suggestion.
+            if top_category["count"] == 1 and top_category["ratio"] < 1:
+                continue
+            if top_category["ratio"] < 0.8:
+                continue
+
+            score = 1.4 * top_category["ratio"] * min(top_category["count"], 4)
+            category_scores[top_category["value"]] += score
+            if top_owner:
+                owner_scores[(top_category["value"], top_owner["value"])] += score
+            matched_terms.append(token)
+            matched_examples.extend(token_entry["examples"][:1])
+
+        if not category_scores:
+            return None
+
+        ranked_categories = sorted(category_scores.items(), key=lambda item: item[1], reverse=True)
+        top_category_id, top_score = ranked_categories[0]
+        second_score = ranked_categories[1][1] if len(ranked_categories) > 1 else 0.0
+
+        if top_score < 2.5:
+            return None
+        if second_score and top_score < second_score * 1.35:
+            return None
+
+        owner_candidates = {
+            owner: score
+            for (category_id, owner), score in owner_scores.items()
+            if category_id == top_category_id
+        }
+        top_owner = cls._top_choice(owner_candidates)
+
+        return {
+            "category_id": top_category_id,
+            "owner_slot": top_owner["value"] if top_owner else "user1",
+            "suggestion_confidence": round(min(0.96, 0.58 + (top_score / 10)), 2),
+            "suggestion_basis": "history_tokens",
+            "matched_terms": sorted(set(matched_terms))[:5],
+            "matched_example": matched_examples[0] if matched_examples else description,
+        }
+
+    @classmethod
+    async def apply_historical_suggestions(
+        cls,
+        user_id: str,
+        rows: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not rows:
+            return rows
+
+        indexes = await cls._historical_match_indexes(user_id)
+        enriched_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            enriched = dict(row)
+            suggestion = None
+            if indexes["exact_map"] or indexes["phrase_map"] or indexes["token_map"]:
+                suggestion = cls._suggest_mapping_for_description(row.get("description", ""), indexes)
+            if suggestion:
+                enriched["category_id"] = suggestion["category_id"]
+                enriched["owner_slot"] = suggestion["owner_slot"]
+                enriched["suggestion_confidence"] = suggestion["suggestion_confidence"]
+                enriched["suggestion_basis"] = suggestion["suggestion_basis"]
+                enriched["matched_terms"] = suggestion["matched_terms"]
+                enriched["matched_example"] = suggestion["matched_example"]
+            else:
+                enriched["suggestion_confidence"] = None
+                enriched["suggestion_basis"] = None
+                enriched["matched_terms"] = []
+                enriched["matched_example"] = None
+
+            enriched_rows.append(enriched)
+
+        return enriched_rows
 
     @classmethod
     def _detect_columns(cls, header: List[str]) -> Dict[str, Optional[int]]:

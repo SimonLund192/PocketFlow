@@ -15,6 +15,10 @@ export interface ParsedRow {
   category_id: string | null;
   owner_slot: 'user1' | 'user2' | 'shared';
   include: boolean;
+  suggestion_confidence?: number | null;
+  suggestion_basis?: string | null;
+  matched_terms?: string[];
+  matched_example?: string | null;
 }
 
 export interface UploadResponse {

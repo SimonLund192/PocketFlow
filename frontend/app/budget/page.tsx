@@ -62,6 +62,16 @@ function computeNeedsReview(row: BudgetDraftRow) {
   return !row.name.trim() || !row.category_id || !row.amount || Number(row.amount) <= 0;
 }
 
+function normalizeSimilarityKey(name: string) {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function findCategoryByName(categories: Category[], text: string) {
   const normalized = text.trim().toLowerCase();
   return categories.find((category) => category.name.trim().toLowerCase() === normalized);
@@ -200,6 +210,24 @@ export default function BudgetPage() {
       .map(([categoryId]) => categoryId)
       .slice(0, 8);
   }, [rows]);
+
+  const similarRowCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      const key = normalizeSimilarityKey(row.name);
+      if (!key || row.category_id) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [rows]);
+
+  const getSimilarMatchCount = (row: BudgetDraftRow) => {
+    const key = normalizeSimilarityKey(row.name);
+    if (!key) return 0;
+
+    const count = similarRowCounts.get(key) || 0;
+    return row.category_id ? count : Math.max(0, count - 1);
+  };
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -403,6 +431,34 @@ export default function BudgetPage() {
       .forEach((row) => {
         applyRowUpdate(row, { include });
       });
+  };
+
+  const handleApplyCategoryToSimilarRows = (
+    sourceRow: BudgetDraftRow,
+    categoryId = sourceRow.category_id,
+  ) => {
+    if (!categoryId) return;
+
+    const key = normalizeSimilarityKey(sourceRow.name);
+    if (!key) return;
+
+    const matchingRows = rows.filter((row) => {
+      if (row.client_id === sourceRow.client_id) return false;
+      if (row.category_id) return false;
+      return normalizeSimilarityKey(row.name) === key;
+    });
+
+    if (matchingRows.length === 0) return;
+
+    matchingRows.forEach((row) => {
+      applyRowUpdate(row, { category_id: categoryId });
+    });
+
+    const categoryName = categories.find((category) => category.id === categoryId)?.name;
+
+    setInfoMessage(
+      `Applied ${categoryName || sourceRow.category?.name || "the selected category"} to ${matchingRows.length} matching row${matchingRows.length === 1 ? "" : "s"}.`,
+    );
   };
 
   const handleSave = async () => {
@@ -716,6 +772,11 @@ export default function BudgetPage() {
                           />
                         </td>
                         <td className="px-4 py-3 min-w-[220px]">
+                          {(() => {
+                            const similarMatchCount = getSimilarMatchCount(row);
+
+                            return (
+                              <>
                           <CategoryPickerButton
                             categories={categories}
                             value={row.category_id}
@@ -726,6 +787,19 @@ export default function BudgetPage() {
                             title={row.name.trim() ? `Category for ${row.name}` : "Choose a category"}
                             description="Search, use a recent category, or browse the grouped list."
                           />
+                          {row.category_id && similarMatchCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyCategoryToSimilarRows(row)}
+                              className="mt-2 inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                            >
+                              Apply to {similarMatchCount} matching row
+                              {similarMatchCount === 1 ? "" : "s"}
+                            </button>
+                          )}
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3">
                           <OwnerSegmentedControl
