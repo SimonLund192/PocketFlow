@@ -33,12 +33,20 @@ Terminal 1:
 docker-compose up --build
 ```
 
-This starts:
-- Backend API: [http://localhost:8000](http://localhost:8000)
-- API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+This now starts infrastructure only by default:
 - MongoDB: `localhost:27017`
 
 Terminal 2:
+
+```bash
+make backend-dev
+```
+
+Backend:
+- API: [http://localhost:8000](http://localhost:8000)
+- API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Terminal 3:
 
 ```bash
 cd frontend
@@ -48,6 +56,12 @@ npm run dev
 
 Frontend:
 - [http://localhost:3000](http://localhost:3000)
+
+If you ever want Docker to run the backend container too, use:
+
+```bash
+docker compose --profile backend up --build
+```
 
 ### Local backend dev path
 From the repo root:
@@ -67,6 +81,14 @@ To run backend tests after that:
 make backend-test
 ```
 
+To run the backend locally with automatic reload on file changes:
+
+```bash
+make backend-dev
+```
+
+That starts `uvicorn` with `--reload`, watching the backend app code in `backend/app`.
+
 If you prefer the manual commands:
 
 ```bash
@@ -75,6 +97,21 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
+```
+
+Start the backend with auto-reload:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
+```
+
+Run backend tests:
+
+```bash
+cd backend
+source .venv/bin/activate
 python -m pytest
 ```
 
