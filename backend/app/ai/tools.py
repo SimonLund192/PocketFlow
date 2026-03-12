@@ -750,6 +750,8 @@ async def propose_budget_entries(user_id: str, **kwargs) -> Dict[str, Any]:
                 "amount": amount,
                 "owner_slot": owner_slot,
                 "month": month,
+                "source": "ai",
+                "needs_review": True,
             })
 
         if not validated:

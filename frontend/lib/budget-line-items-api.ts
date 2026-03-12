@@ -1,5 +1,6 @@
 // budget-line-items-api.ts
 // API client for budget line item operations
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -41,22 +42,41 @@ export interface BudgetLineItemUpdate {
   owner_slot?: 'user1' | 'user2' | 'shared';
 }
 
-// Helper to get auth token
-function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
+export interface BudgetDraftRowPayload {
+  id?: string;
+  name: string;
+  category_id: string;
+  amount: number;
+  owner_slot: 'user1' | 'user2' | 'shared';
+  include: boolean;
+  source: 'existing' | 'manual' | 'ai' | 'import' | 'copied';
+  needs_review: boolean;
 }
 
-// Helper to build headers
-function buildHeaders(): HeadersInit {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+export interface SaveBudgetDraftRequest {
+  month: string;
+  rows: BudgetDraftRowPayload[];
+  deleted_ids: string[];
+}
+
+export interface SaveBudgetDraftResponse {
+  budget: {
+    id: string;
+    user_id: string;
+    month: string;
+    created_at: string;
+    updated_at: string;
   };
-  const token = getAuthToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
+  rows: Array<BudgetDraftRowPayload & {
+    category?: {
+      id: string;
+      name: string;
+      type: 'income' | 'expense' | 'savings' | 'fun';
+      icon: string;
+      color: string;
+    };
+  }>;
+  removed_ids: string[];
 }
 
 /**
@@ -69,13 +89,10 @@ export async function getBudgetLineItems(budgetId?: string): Promise<BudgetLineI
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budget line items: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budget line items: ${response.statusText}`);
 
   return response.json();
 }
@@ -86,13 +103,10 @@ export async function getBudgetLineItems(budgetId?: string): Promise<BudgetLineI
 export async function getBudgetLineItemsByBudget(budgetId: string): Promise<BudgetLineItemWithCategory[]> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/budget/${budgetId}`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budget line items: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budget line items: ${response.statusText}`);
 
   return response.json();
 }
@@ -103,13 +117,10 @@ export async function getBudgetLineItemsByBudget(budgetId: string): Promise<Budg
 export async function getBudgetLineItem(id: string): Promise<BudgetLineItem> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/${id}`, {
     method: 'GET',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to fetch budget line item: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to fetch budget line item: ${response.statusText}`);
 
   return response.json();
 }
@@ -120,14 +131,11 @@ export async function getBudgetLineItem(id: string): Promise<BudgetLineItem> {
 export async function createBudgetLineItem(data: BudgetLineItemCreate): Promise<BudgetLineItem> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/`, {
     method: 'POST',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to create budget line item: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to create budget line item: ${response.statusText}`);
 
   return response.json();
 }
@@ -138,14 +146,11 @@ export async function createBudgetLineItem(data: BudgetLineItemCreate): Promise<
 export async function updateBudgetLineItem(id: string, data: BudgetLineItemUpdate): Promise<BudgetLineItem> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/${id}`, {
     method: 'PUT',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(data),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to update budget line item: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to update budget line item: ${response.statusText}`);
 
   return response.json();
 }
@@ -156,11 +161,22 @@ export async function updateBudgetLineItem(id: string, data: BudgetLineItemUpdat
 export async function deleteBudgetLineItem(id: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/api/budget-line-items/${id}`, {
     method: 'DELETE',
-    headers: buildHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-    throw new Error(errorData.detail || `Failed to delete budget line item: ${response.statusText}`);
-  }
+  await throwIfUnauthorized(response, `Failed to delete budget line item: ${response.statusText}`);
+}
+
+export async function saveBudgetDraft(
+  data: SaveBudgetDraftRequest,
+): Promise<SaveBudgetDraftResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/budget-line-items/draft`, {
+    method: 'PUT',
+    headers: buildAuthHeaders(),
+    body: JSON.stringify(data),
+  });
+
+  await throwIfUnauthorized(response, `Failed to save budget draft: ${response.statusText}`);
+
+  return response.json();
 }

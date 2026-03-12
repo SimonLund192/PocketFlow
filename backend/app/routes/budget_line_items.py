@@ -3,13 +3,15 @@ API routes for budget line item operations.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Annotated
+from typing import Annotated, Union, List, Optional
 
 from app.models import (
     BudgetLineItemCreate,
     BudgetLineItemUpdate,
     BudgetLineItemResponse,
     BudgetLineItemWithCategory,
+    SaveBudgetDraftRequest,
+    SaveBudgetDraftResponse,
 )
 from app.services.budget_line_item_service import BudgetLineItemService
 from app.dependencies import get_current_user_id
@@ -36,10 +38,29 @@ async def create_line_item(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/", response_model=list[BudgetLineItemResponse] | list[BudgetLineItemWithCategory])
+@router.put("/draft", response_model=SaveBudgetDraftResponse)
+async def save_budget_draft(
+    draft_data: SaveBudgetDraftRequest,
+    user_id: Annotated[str, Depends(get_current_user_id)]
+):
+    """
+    Save a full editable draft for a month in one request.
+
+    Included rows are upserted, and explicit deleted_ids are removed.
+    """
+    try:
+        return await BudgetLineItemService.save_budget_draft(
+            user_id=user_id,
+            draft_data=draft_data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/", response_model=Union[List[BudgetLineItemResponse], List[BudgetLineItemWithCategory]])
 async def get_line_items(
     user_id: Annotated[str, Depends(get_current_user_id)],
-    budget_id: str | None = Query(None, description="Filter by budget ID"),
+    budget_id: Optional[str] = Query(None, description="Filter by budget ID"),
     include_category: bool = Query(False, description="Include populated category details")
 ):
     """
@@ -56,7 +77,7 @@ async def get_line_items(
     )
 
 
-@router.get("/{line_item_id}", response_model=BudgetLineItemResponse | BudgetLineItemWithCategory)
+@router.get("/{line_item_id}", response_model=Union[BudgetLineItemResponse, BudgetLineItemWithCategory])
 async def get_line_item(
     line_item_id: str,
     user_id: Annotated[str, Depends(get_current_user_id)],

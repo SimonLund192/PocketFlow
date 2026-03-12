@@ -1,3 +1,5 @@
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface DashboardStats {
@@ -28,25 +30,12 @@ export interface ExpenseBreakdown {
  * Fetch dashboard statistics
  */
 export async function getDashboardStats(month?: string): Promise<DashboardStats> {
-  // Get the token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const params = month ? `?month=${month}` : '';
   const response = await fetch(`${API_BASE_URL}/api/dashboard/stats${params}`, {
-    headers
+    headers: buildAuthHeaders(),
   });
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch dashboard stats");
-  }
+
+  await throwIfUnauthorized(response, "Failed to fetch dashboard stats");
   return response.json();
 }
 
@@ -54,24 +43,11 @@ export async function getDashboardStats(month?: string): Promise<DashboardStats>
  * Fetch balance trends for chart
  */
 export async function getBalanceTrends(): Promise<BalanceTrend[]> {
-  // Get the token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const response = await fetch(`${API_BASE_URL}/api/dashboard/balance-trends`, {
-    headers
+    headers: buildAuthHeaders(),
   });
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch balance trends");
-  }
+
+  await throwIfUnauthorized(response, "Failed to fetch balance trends");
   return response.json();
 }
 
@@ -79,24 +55,11 @@ export async function getBalanceTrends(): Promise<BalanceTrend[]> {
  * Fetch expense breakdown
  */
 export async function getExpenseBreakdown(month?: string): Promise<ExpenseBreakdown[]> {
-  // Get the token from localStorage
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const params = month ? `?month=${month}` : '';
   const response = await fetch(`${API_BASE_URL}/api/dashboard/expense-breakdown${params}`, {
-    headers
+    headers: buildAuthHeaders(),
   });
-  
-  if (!response.ok) {
-    throw new Error("Failed to fetch expense breakdown");
-  }
+
+  await throwIfUnauthorized(response, "Failed to fetch expense breakdown");
   return response.json();
 }

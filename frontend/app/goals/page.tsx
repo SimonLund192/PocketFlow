@@ -37,6 +37,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Tabs from "@/components/Tabs";
 import GoalItemsInput, { GoalItem as GoalItemType } from "@/components/GoalItemsInput";
 import ConfirmationDialog from "@/components/ConfirmationDialog";
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
 interface GoalItem {
   url?: string;
@@ -222,6 +223,7 @@ function SortableGoalItem({
 }
 
 export default function Goals() {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const [goals, setGoals] = useState<Goal[]>([]);
   const [activeTab, setActiveTab] = useState("Shared Goals"); // Add activeTab
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
@@ -263,21 +265,15 @@ export default function Goals() {
   useEffect(() => {
     const fetchGoals = async () => {
       try {
-        const token = localStorage.getItem("token");
-        
         // Fetch goals and balance trends in parallel
         const [goalsResponse, balanceTrends] = await Promise.all([
-          fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
-            headers: {
-              "Authorization": `Bearer ${token}`
-            }
+          fetch(`${API_BASE_URL}/api/goals`, {
+            headers: buildAuthHeaders(false),
           }),
           getBalanceTrends()
         ]);
 
-        if (!goalsResponse.ok) {
-          throw new Error("Failed to fetch goals");
-        }
+        await throwIfUnauthorized(goalsResponse, "Failed to fetch goals");
 
         const goalsData = await goalsResponse.json();
         
@@ -322,19 +318,14 @@ export default function Goals() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-      
       // Calculate target amount from items
       const targetAmount = newGoalItems.length > 0
         ? newGoalItems.reduce((sum, item) => sum + item.amount, 0)
         : parseFloat(newGoalAmount);
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals`, {
+      const response = await fetch(`${API_BASE_URL}/api/goals`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
+        headers: buildAuthHeaders(),
         body: JSON.stringify({
           name: newGoalName,
           target_amount: targetAmount,
@@ -344,9 +335,7 @@ export default function Goals() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create goal");
-      }
+      await throwIfUnauthorized(response, "Failed to create goal");
 
       const createdGoal = await response.json();
       
@@ -387,19 +376,14 @@ export default function Goals() {
     setLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-      
       // Calculate target amount from items if present
       const targetAmount = (editingGoal.items && editingGoal.items.length > 0)
         ? editingGoal.items.reduce((sum, item) => sum + item.amount, 0)
         : editingGoal.target;
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${editingGoal.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/goals/${editingGoal.id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
+        headers: buildAuthHeaders(),
         body: JSON.stringify({
           name: editingGoal.name,
           target_amount: targetAmount,
@@ -408,9 +392,7 @@ export default function Goals() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to update goal");
-      }
+      await throwIfUnauthorized(response, "Failed to update goal");
 
       const updatedGoal = await response.json();
       
@@ -445,17 +427,12 @@ export default function Goals() {
 
   const handleDeleteGoal = async (goalId: string) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/${goalId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/goals/${goalId}`, {
         method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
+        headers: buildAuthHeaders(false),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to delete goal");
-      }
+      await throwIfUnauthorized(response, "Failed to delete goal");
 
       const filteredGoals = goals.filter(g => g.id !== goalId);
       const recalculatedLabels = recalculateAllGoals(filteredGoals, totalSharedSavings, totalFunSavings);
@@ -548,17 +525,14 @@ export default function Goals() {
 
         // API Call to persist order (send only the updated sub-list IDs)
         try {
-          const token = localStorage.getItem("token");
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/goals/reorder`, {
+          const response = await fetch(`${API_BASE_URL}/api/goals/reorder`, {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${token}`
-            },
+            headers: buildAuthHeaders(),
             body: JSON.stringify({
               goal_ids: updatedSubList.map(g => g.id)
             })
           });
+          await throwIfUnauthorized(response, "Failed to reorder goals");
         } catch (error) {
           console.error("Failed to reorder goals:", error);
         }

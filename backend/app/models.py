@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import Optional, Literal, Annotated
+from typing import Optional, Literal, Annotated, List
 from datetime import datetime, timezone
 from bson import ObjectId
 
@@ -262,3 +262,53 @@ class BudgetLineItemWithCategory(BudgetLineItemResponse):
         description="Populated category information"
     )
 
+
+class BudgetDraftRow(BaseModel):
+    """Editable draft row shared by manual, AI, and import flows."""
+    id: Optional[str] = Field(default=None, description="Existing line item ID")
+    name: str = Field("", max_length=200)
+    category_id: str = Field("", description="Reference to a category by ID")
+    amount: float = Field(0, ge=0, description="Budget amount")
+    owner_slot: Literal["user1", "user2", "shared"] = Field(default="user1")
+    include: bool = True
+    source: Literal["existing", "manual", "ai", "import", "copied"] = "manual"
+    needs_review: bool = False
+
+
+class BudgetDraftRowResponse(BudgetDraftRow):
+    """Draft row with populated category information."""
+    category: Optional[CategoryResponse] = Field(
+        None,
+        description="Populated category information"
+    )
+
+
+class InitializeBudgetMonthRequest(BaseModel):
+    month: str = Field(
+        ...,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description="Budget month in YYYY-MM format"
+    )
+    mode: Literal["empty", "copy_previous"]
+
+
+class InitializeBudgetMonthResponse(BaseModel):
+    budget: BudgetResponse
+    rows: List[BudgetDraftRowResponse]
+    source_budget_month: Optional[str] = None
+
+
+class SaveBudgetDraftRequest(BaseModel):
+    month: str = Field(
+        ...,
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+        description="Budget month in YYYY-MM format"
+    )
+    rows: List[BudgetDraftRow]
+    deleted_ids: List[str] = Field(default_factory=list)
+
+
+class SaveBudgetDraftResponse(BaseModel):
+    budget: BudgetResponse
+    rows: List[BudgetDraftRowResponse]
+    removed_ids: List[str] = Field(default_factory=list)

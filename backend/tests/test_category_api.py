@@ -292,7 +292,7 @@ class TestCategoryAPI:
         assert response.status_code == 400
         assert "Cannot delete category" in response.json()["detail"]
 
-    async def test_user_isolation(self, async_client: AsyncClient, db_session, auth_headers):
+    async def test_user_isolation(self, async_client: AsyncClient, db_session, auth_headers, auth_override):
         """Test that users cannot access each other's categories"""
         user1_id = "user_1"
         user2_id = "user_2"
@@ -304,20 +304,19 @@ class TestCategoryAPI:
         )
         
         # User 2 tries to get user 1's category
-        with patch("app.routes.categories.get_current_user_id", return_value=user2_id):
-            response = await async_client.get(
-                f"/api/categories/{category1.id}",
-                headers=auth_headers
-            )
+        auth_override["user_id"] = user2_id
+        response = await async_client.get(
+            f"/api/categories/{category1.id}",
+            headers=auth_headers
+        )
         
         assert response.status_code == 404  # Should not find it
         
         # User 2 should only see their own categories
-        with patch("app.routes.categories.get_current_user_id", return_value=user2_id):
-            response = await async_client.get(
-                "/api/categories/",
-                headers=auth_headers
-            )
+        response = await async_client.get(
+            "/api/categories/",
+            headers=auth_headers
+        )
         
         assert response.status_code == 200
         assert len(response.json()) == 0  # User 2 has no categories

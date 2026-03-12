@@ -8,12 +8,14 @@ import {
   HelpCircle,
   Database,
   Wallet,
+  FileUp,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 const navItems = [
   { icon: Home, label: "Home", path: "/" },
   { icon: Calculator, label: "Budget", path: "/budget" },
+  { icon: FileUp, label: "Import", path: "/import" },
   { icon: Target, label: "Goals", path: "/goals" },
   { icon: Database, label: "Database", path: "/database" },
   { icon: Settings, label: "Account", path: "/account" },

@@ -1,731 +1,842 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Copy, Plus, Save, TrendingDown, TrendingUp, Wand2, X } from "lucide-react";
 import Header from "@/components/Header";
-import BudgetTabContent from "@/components/BudgetTabContent";
-import { TrendingUp, TrendingDown } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
-import { categoriesApi, Category } from "@/lib/categories-api";
-import { getOrCreateBudget, Budget } from "@/lib/budgets-api";
-import { 
-  getBudgetLineItemsByBudget,
-  createBudgetLineItem, 
-  updateBudgetLineItem, 
-  deleteBudgetLineItem,
-} from "@/lib/budget-line-items-api";
-import { authApi } from "@/lib/auth-api";
 import QuickCategoryDialog from "@/components/QuickCategoryDialog";
+import { CategoryPickerButton, OwnerSegmentedControl } from "@/components/BudgetDraftPickers";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { authApi } from "@/lib/auth-api";
+import { categoriesApi, Category } from "@/lib/categories-api";
 import { useMonth } from "@/contexts/MonthContext";
-import { BudgetLineItemFormValues } from "@/components/BudgetLineItemFormDialog";
+import { useBudgetDrafts } from "@/contexts/BudgetDraftContext";
+import { BudgetDraftRow, BudgetTabType, makeDraftRow, rowMatchesTab } from "@/lib/budget-draft";
+import { getBudgetByMonth, initializeBudgetMonth } from "@/lib/budgets-api";
+import { getBudgetLineItemsByBudget, saveBudgetDraft } from "@/lib/budget-line-items-api";
 
-interface BudgetItem {
-  id: string;
-  name: string;
-  category: string;
-  amount: number;
-}
+type OwnerSlot = "user1" | "user2" | "shared";
 
-interface StatCardProps {
+const tabs: { id: BudgetTabType; label: string }[] = [
+  { id: "all", label: "All Items" },
+  { id: "income", label: "Income" },
+  { id: "shared-expenses", label: "Shared Expenses" },
+  { id: "personal-expenses", label: "Personal Expenses" },
+  { id: "shared-savings", label: "Savings" },
+  { id: "fun", label: "Fun" },
+];
+
+function StatCard({
+  title,
+  value,
+  tone = "neutral",
+}: {
   title: string;
   value: string;
-  subtitle?: string;
-  trend?: "up" | "down" | "neutral";
-}
-
-type TabType = "income" | "shared-expenses" | "personal-expenses" | "shared-savings" | "fun";
-
-function StatCard({ title, value, subtitle, trend }: StatCardProps) {
-  const getTrendIcon = () => {
-    if (trend === "up") return <TrendingUp className="w-4 h-4 text-green-500" />;
-    if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-500" />;
-    return null;
-  };
-
+  tone?: "positive" | "negative" | "neutral";
+}) {
   return (
-    <Card className="p-6 bg-white">
-      <div className="space-y-2">
-        <p className="text-sm text-gray-500 font-medium uppercase tracking-wide">
-          {title}
-        </p>
-        <p className="text-3xl font-bold text-gray-900">{value}</p>
-        {subtitle && (
-          <div className="flex items-center gap-1 text-sm text-gray-500">
-            {getTrendIcon()}
-            <span>{subtitle}</span>
-          </div>
-        )}
+    <Card className="p-5 bg-white">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">{title}</p>
+      <div className="mt-3 flex items-center gap-2">
+        {tone === "positive" && <TrendingUp className="w-4 h-4 text-green-500" />}
+        {tone === "negative" && <TrendingDown className="w-4 h-4 text-red-500" />}
+        <p className="text-2xl font-bold text-gray-900">{value}</p>
       </div>
     </Card>
   );
 }
 
+function formatCurrency(amount: number) {
+  return `${amount.toLocaleString("da-DK")} kr.`;
+}
+
+function normalizeAmount(raw: string): number | "" {
+  if (!raw.trim()) return "";
+  const normalized = raw.replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : "";
+}
+
+function computeNeedsReview(row: BudgetDraftRow) {
+  return !row.name.trim() || !row.category_id || !row.amount || Number(row.amount) <= 0;
+}
+
+function normalizeSimilarityKey(name: string) {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function findCategoryByName(categories: Category[], text: string) {
+  const normalized = text.trim().toLowerCase();
+  return categories.find((category) => category.name.trim().toLowerCase() === normalized);
+}
+
+function getDefaultOwnerFromTab(tab: BudgetTabType): OwnerSlot {
+  if (tab === "shared-expenses" || tab === "shared-savings") return "shared";
+  return "user1";
+}
+
+function getPreferredCategoryFilter(tab: BudgetTabType): "all" | Category["type"] {
+  if (tab === "income") return "income";
+  if (tab === "shared-expenses" || tab === "personal-expenses") return "expense";
+  if (tab === "shared-savings") return "savings";
+  if (tab === "fun") return "fun";
+  return "all";
+}
+
+function sourceLabel(source: BudgetDraftRow["source"]) {
+  if (source === "ai") return "AI";
+  if (source === "import") return "Import";
+  if (source === "copied") return "Copied";
+  if (source === "existing") return "Saved";
+  return "Manual";
+}
+
+function parseQuickAddLines(
+  input: string,
+  activeTab: BudgetTabType,
+  categories: Category[],
+): BudgetDraftRow[] {
+  const owner = getDefaultOwnerFromTab(activeTab);
+
+  return input
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(.*?)(-?\d[\d.,]*)$/);
+      const namePart = match?.[1]?.trim() || line;
+      const amountPart = match?.[2]?.trim() || "";
+      const matchedCategory = findCategoryByName(categories, namePart);
+      const amount = amountPart ? normalizeAmount(amountPart) : "";
+
+      return makeDraftRow({
+        name: namePart,
+        amount,
+        category_id: matchedCategory?.id || "",
+        category: matchedCategory,
+        owner_slot: owner,
+        include: true,
+        source: "manual",
+        needs_review: !matchedCategory || !amount,
+      });
+    });
+}
+
 export default function BudgetPage() {
   const { selectedMonth } = useMonth();
+  const { drafts, getDraftState, hydrateMonth, addRow, updateRow, removeRow } = useBudgetDrafts();
 
-  const [activeTab, setActiveTab] = useState<TabType>("income");
-  const [user1Name, setUser1Name] = useState("Simon Lund");
-  const [user2Name, setUser2Name] = useState("User 2");
-
-  // Backend data state
+  const [activeTab, setActiveTab] = useState<BudgetTabType>("all");
+  const [onlyNeedsReview, setOnlyNeedsReview] = useState(false);
+  const [quickAddInput, setQuickAddInput] = useState("");
+  const [user1Name, setUser1Name] = useState("You");
+  const [user2Name, setUser2Name] = useState("Partner");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
-  const [savingsCategories, setSavingsCategories] = useState<Category[]>([]);
-  const [funCategories, setFunCategories] = useState<Category[]>([]);
-  const [currentBudget, setCurrentBudget] = useState<Budget | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkCategoryId, setBulkCategoryId] = useState("");
+  const [bulkOwner, setBulkOwner] = useState<OwnerSlot | "">("");
 
-  // User 1 Income items
-  const [user1IncomeItems, setUser1IncomeItems] = useState<BudgetItem[]>([]);
+  const loadedMonthsRef = useRef<Set<string>>(new Set());
 
-  // User 2 Income items
-  const [user2IncomeItems, setUser2IncomeItems] = useState<BudgetItem[]>([]);
+  const draftState = drafts[selectedMonth] || getDraftState(selectedMonth);
+  const rows = useMemo(
+    () =>
+      draftState.rows.map((row) => ({
+        ...row,
+        category: categories.find((category) => category.id === row.category_id) || row.category,
+      })),
+    [categories, draftState.rows],
+  );
 
-  // Refs for debouncing saves
-  const saveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const savingItems = useRef<Set<string>>(new Set());
-  const createdItems = useRef<Set<string>>(new Set()); // Track items already created in backend
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (!rowMatchesTab(row, activeTab)) return false;
+      if (onlyNeedsReview && !row.needs_review) return false;
+      return true;
+    });
+  }, [activeTab, onlyNeedsReview, rows]);
 
-  // Load user profile on mount
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const profile = await authApi.getProfile();
-        if (profile.partner_name) {
-          setUser2Name(profile.partner_name);
-        }
-        if (profile.full_name) {
-          setUser1Name(profile.full_name);
-        }
-      } catch (error) {
-        console.error("Failed to load profile", error);
-      }
+  const filteredIds = useMemo(() => filteredRows.map((row) => row.client_id), [filteredRows]);
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every((id) => selectedIds.includes(id));
+
+  const totals = useMemo(() => {
+    const included = rows.filter((row) => row.include && row.amount !== "" && !row.needs_review);
+    const totalIncome = included
+      .filter((row) => row.category?.type === "income")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+    const sharedExpenses = included
+      .filter((row) => row.category?.type === "expense" && row.owner_slot === "shared")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+    const personalExpenses = included
+      .filter((row) => row.category?.type === "expense" && row.owner_slot !== "shared")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+    const sharedSavings = included
+      .filter((row) => row.category?.type === "savings")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+    const funSpending = included
+      .filter((row) => row.category?.type === "fun")
+      .reduce((sum, row) => sum + Number(row.amount), 0);
+
+    return {
+      totalIncome,
+      sharedExpenses,
+      personalExpenses,
+      sharedSavings,
+      funSpending,
+      remaining: totalIncome - sharedExpenses - personalExpenses - sharedSavings - funSpending,
     };
-    loadProfile();
-  }, []);
+  }, [rows]);
 
-  // Load categories on mount
+  const recentCategoryIds = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      if (!row.category_id) return;
+      counts.set(row.category_id, (counts.get(row.category_id) || 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([categoryId]) => categoryId)
+      .slice(0, 8);
+  }, [rows]);
+
+  const similarRowCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    rows.forEach((row) => {
+      const key = normalizeSimilarityKey(row.name);
+      if (!key || row.category_id) return;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [rows]);
+
+  const getSimilarMatchCount = (row: BudgetDraftRow) => {
+    const key = normalizeSimilarityKey(row.name);
+    if (!key) return 0;
+
+    const count = similarRowCounts.get(key) || 0;
+    return row.category_id ? count : Math.max(0, count - 1);
+  };
+
   useEffect(() => {
-    const loadCategories = async () => {
+    const loadInitialData = async () => {
       try {
-        console.log('Loading categories...');
-        const allCategories = await categoriesApi.getAll();
-        console.log('Loaded categories:', allCategories);
+        const [profile, allCategories] = await Promise.all([
+          authApi.getProfile(),
+          categoriesApi.getAll(),
+        ]);
+
         setCategories(allCategories);
-        const incomeOnly = allCategories.filter(cat => cat.type === 'income');
-        const expenseOnly = allCategories.filter(cat => cat.type === 'expense');
-        const savingsOnly = allCategories.filter(cat => cat.type === 'savings');
-        const funOnly = allCategories.filter(cat => cat.type === 'fun');
-        console.log('Income categories:', incomeOnly);
-        console.log('Expense categories:', expenseOnly);
-        console.log('Savings categories:', savingsOnly);
-        console.log('Fun categories:', funOnly);
-        setIncomeCategories(incomeOnly);
-        setExpenseCategories(expenseOnly);
-        setSavingsCategories(savingsOnly);
-        setFunCategories(funOnly);
+        if (profile.full_name) setUser1Name(profile.full_name);
+        if (profile.partner_name) setUser2Name(profile.partner_name);
       } catch (error) {
-        console.error('Failed to load categories:', error);
-      }
-    };
-    loadCategories();
-  }, []);
-
-  // Load budget and line items when month changes
-  useEffect(() => {
-    const loadBudgetData = async () => {
-      if (!selectedMonth) return;
-      
-      console.log('Loading budget data for month:', selectedMonth);
-      setIsLoading(true);
-      try {
-        // Clear created items tracking when loading new data
-        createdItems.current.clear();
-        
-        // Get or create budget for the month
-        console.log('Getting or creating budget...');
-        const budget = await getOrCreateBudget(selectedMonth);
-        console.log('Budget loaded:', budget);
-        setCurrentBudget(budget);
-
-        // Load budget line items WITH category info
-        console.log('Loading budget line items...');
-        const lineItems = await getBudgetLineItemsByBudget(budget.id);
-        console.log('Loaded line items with categories:', lineItems);
-        
-        // Track all loaded items as created
-        lineItems.forEach(item => createdItems.current.add(item.id));
-        
-        // Separate line items by owner_slot AND category type
-        const user1Income = lineItems.filter(item => 
-          item.owner_slot === 'user1' && item.category?.type === 'income'
-        );
-        const user2Income = lineItems.filter(item => 
-          item.owner_slot === 'user2' && item.category?.type === 'income'
-        );
-        const sharedExpenses = lineItems.filter(item => 
-          item.owner_slot === 'shared' && item.category?.type === 'expense'
-        );
-        const user1PersonalExp = lineItems.filter(item => 
-          item.owner_slot === 'user1' && item.category?.type === 'expense'
-        );
-        const user2PersonalExp = lineItems.filter(item => 
-          item.owner_slot === 'user2' && item.category?.type === 'expense'
-        );
-        const sharedSavings = lineItems.filter(item => 
-          item.owner_slot === 'shared' && item.category?.type === 'savings'
-        );
-        const sharedFun = lineItems.filter(item => 
-          item.owner_slot === 'shared' && item.category?.type === 'fun'
-        );
-
-        console.log('User1 income items:', user1Income);
-        console.log('User2 income items:', user2Income);
-        console.log('Shared expense items:', sharedExpenses);
-        console.log('User1 personal expenses:', user1PersonalExp);
-        console.log('User2 personal expenses:', user2PersonalExp);
-        console.log('Shared savings items:', sharedSavings);
-        console.log('Shared fun items:', sharedFun);
-
-        // Convert BudgetLineItem to BudgetItem format
-        setUser1IncomeItems(user1Income.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setUser2IncomeItems(user2Income.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setSharedExpenseItems(sharedExpenses.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setUser1PersonalExpenses(user1PersonalExp.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setUser2PersonalExpenses(user2PersonalExp.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setSharedSavingsItems(sharedSavings.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-
-        setSharedFunItems(sharedFun.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category_id,
-          amount: item.amount
-        })));
-      } catch (error) {
-        console.error('Failed to load budget data:', error);
+        console.error("Failed to load budget page dependencies", error);
+        setSaveError("Failed to load budget data.");
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadBudgetData();
-  }, [selectedMonth]);
-
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      // Clear all pending save timeouts
-      saveTimeouts.current.forEach(timeout => clearTimeout(timeout));
-      saveTimeouts.current.clear();
-    };
+    loadInitialData();
   }, []);
 
-
-  // Shared Expenses
-  const [sharedExpenseItems, setSharedExpenseItems] = useState<BudgetItem[]>([]);
-
-  // Personal Expenses (User 1 & User 2)
-  const [user1PersonalExpenses, setUser1PersonalExpenses] = useState<BudgetItem[]>([]);
-  const [user2PersonalExpenses, setUser2PersonalExpenses] = useState<BudgetItem[]>([]);
-
-  // Shared Savings
-  const [sharedSavingsItems, setSharedSavingsItems] = useState<BudgetItem[]>([]);
-
-  // Fun items (shared)
-  const [sharedFunItems, setSharedFunItems] = useState<BudgetItem[]>([]);
-
-  // Add a new budget item from the modal form — saves immediately to backend
-  const addItem = async (
-    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, 
-    ownerSlot: 'user1' | 'user2' | 'shared',
-    values: BudgetLineItemFormValues,
-  ) => {
-    if (!currentBudget) {
-      console.error('No budget loaded');
-      return;
-    }
-
-    // Optimistic local add with temp ID
-    const tempId = `temp-${Date.now()}`;
-    const newItem: BudgetItem = {
-      id: tempId,
-      name: values.name,
-      category: values.category,
-      amount: values.amount,
-    };
-    setter((prev) => [...prev, newItem]);
-
-    // Immediately persist to backend
-    try {
-      const created = await createBudgetLineItem({
-        budget_id: currentBudget.id,
-        name: values.name,
-        category_id: values.category,
-        amount: values.amount,
-        owner_slot: ownerSlot,
-      });
-      // Replace temp ID with real ID
-      setter((prev) =>
-        prev.map((i) => (i.id === tempId ? { ...i, id: created.id } : i))
-      );
-      createdItems.current.add(created.id);
-    } catch (error) {
-      console.error('Failed to create budget line item:', error);
-      // Remove the optimistic item on error
-      setter((prev) => prev.filter((i) => i.id !== tempId));
-    }
-  };
-
-  const saveItem = async (
-    item: BudgetItem,
-    ownerSlot: 'user1' | 'user2' | 'shared',
-    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>
-  ) => {
-    if (!currentBudget) {
-      console.log('No budget loaded, cannot save');
-      return;
-    }
-
-    // For new items (temp ID), require all fields to be filled
-    if (item.id.startsWith('temp-')) {
-      if (!item.name || !item.category || item.amount <= 0) {
-        console.log('Incomplete new item, waiting for all fields:', item);
-        return; // Don't save incomplete new items
-      }
-    } else {
-      // For existing items, just need at least one field
-      if (!item.name && !item.category && !item.amount) {
-        console.log('Nothing to update');
+  useEffect(() => {
+    const loadMonth = async () => {
+      if (isLoading || loadedMonthsRef.current.has(selectedMonth) || draftState.initialized || draftState.hasUnsavedChanges) {
         return;
       }
-    }
 
-    // Prevent duplicate saves for the same item
-    if (savingItems.current.has(item.id)) {
-      console.log('Save already in progress for', item.id);
-      return;
-    }
-
-    savingItems.current.add(item.id);
-
-    try {
-      // If item has temp ID, create new item in backend
-      if (item.id.startsWith('temp-')) {
-        // Check if this temp item was already created
-        if (createdItems.current.has(item.id)) {
-          console.log('Item already created, skipping:', item.id);
-          savingItems.current.delete(item.id);
+      try {
+        const budget = await getBudgetByMonth(selectedMonth).catch(() => null);
+        if (!budget) {
+          loadedMonthsRef.current.add(selectedMonth);
+          hydrateMonth(selectedMonth, {
+            budgetId: undefined,
+            rows: [],
+            deletedIds: [],
+            initialized: false,
+            hasUnsavedChanges: false,
+          });
           return;
         }
 
-        console.log('Creating new budget line item:', item);
-        const created = await createBudgetLineItem({
-          budget_id: currentBudget.id,
-          name: item.name,
-          category_id: item.category,
-          amount: item.amount,
-          owner_slot: ownerSlot
-        });
-
-        console.log('Created budget line item with ID:', created.id);
-        
-        // Mark this temp item as created
-        createdItems.current.add(item.id);
-        
-        // Update the item with the real ID from backend
-        setter(prev => prev.map(i => 
-          i.id === item.id ? { ...i, id: created.id } : i
-        ));
-        
-        // Remove temp ID from created set and add real ID
-        createdItems.current.delete(item.id);
-        createdItems.current.add(created.id);
-      } else {
-        // Update existing item (already has real backend ID)
-        console.log('Updating existing budget line item:', item.id);
-        await updateBudgetLineItem(item.id, {
-          name: item.name,
-          category_id: item.category,
-          amount: item.amount,
-          owner_slot: ownerSlot
-        });
-      }
-    } catch (error) {
-      console.error('Failed to save budget line item:', error);
-      // Remove from created set on error so it can be retried
-      if (item.id.startsWith('temp-')) {
-        createdItems.current.delete(item.id);
-      }
-    } finally {
-      savingItems.current.delete(item.id);
-    }
-  };
-
-  const removeItem = async (
-    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>, 
-    id: string
-  ) => {
-    try {
-      // Only call API if it's not a temp ID
-      if (!id.startsWith('temp-')) {
-        await deleteBudgetLineItem(id);
-      }
-      setter((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
-      console.error('Failed to delete budget line item:', error);
-    }
-  };
-
-  const updateItem = async (
-    setter: React.Dispatch<React.SetStateAction<BudgetItem[]>>,
-    id: string,
-    field: keyof BudgetItem,
-    value: any,
-    ownerSlot: 'user1' | 'user2' | 'shared'
-  ) => {
-    console.log(`Updating item ${id}, field: ${field}, value:`, value);
-    
-    // Clear any existing timeout for this item
-    const existingTimeout = saveTimeouts.current.get(id);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-      console.log(`Cleared existing timeout for ${id}`);
-    }
-
-    // Capture the updated item in a ref to avoid closure issues
-    const itemToSaveRef = { current: null as BudgetItem | null };
-    
-    // Update local state immediately for responsive UI
-    setter((prev) => {
-      return prev.map((item) => {
-        if (item.id === id) {
-          const updated: BudgetItem = { ...item, [field]: value };
-          itemToSaveRef.current = updated; // Capture the updated item
-          console.log('Updated item:', updated);
-          return updated;
+        const lineItems = await getBudgetLineItemsByBudget(budget.id);
+        if (lineItems.length === 0) {
+          hydrateMonth(selectedMonth, {
+            budgetId: budget.id,
+            rows: [],
+            deletedIds: [],
+            initialized: false,
+            hasUnsavedChanges: false,
+          });
+        } else {
+          hydrateMonth(selectedMonth, {
+            budgetId: budget.id,
+            rows: lineItems.map((item) =>
+              makeDraftRow({
+                id: item.id,
+                name: item.name,
+                category_id: item.category_id,
+                amount: item.amount,
+                owner_slot: item.owner_slot,
+                include: true,
+                source: "existing",
+                needs_review: false,
+                category: item.category,
+              }),
+            ),
+            deletedIds: [],
+            initialized: true,
+            hasUnsavedChanges: false,
+          });
         }
-        return item;
+      } catch (error) {
+        console.error("Failed to load month", error);
+        setSaveError("Failed to load this month.");
+      } finally {
+        loadedMonthsRef.current.add(selectedMonth);
+      }
+    };
+
+    loadMonth();
+  }, [draftState.hasUnsavedChanges, draftState.initialized, hydrateMonth, isLoading, selectedMonth]);
+
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => rows.some((row) => row.client_id === id)));
+  }, [rows]);
+
+  const handleMonthInitialize = async (mode: "empty" | "copy_previous") => {
+    setSaveError(null);
+    setInfoMessage(null);
+    setIsSaving(true);
+
+    try {
+      const response = await initializeBudgetMonth({ month: selectedMonth, mode });
+      hydrateMonth(selectedMonth, {
+        budgetId: response.budget.id,
+        rows: response.rows.map((row) =>
+          makeDraftRow({
+            id: row.id,
+            name: row.name,
+            category_id: row.category_id,
+            amount: row.amount,
+            owner_slot: row.owner_slot,
+            include: row.include,
+            source: row.source,
+            needs_review: row.needs_review,
+            category: row.category,
+          }),
+        ),
+        deletedIds: [],
+        initialized: true,
+        hasUnsavedChanges: false,
       });
+      loadedMonthsRef.current.add(selectedMonth);
+
+      if (mode === "copy_previous" && response.source_budget_month) {
+        setInfoMessage(`Started ${selectedMonth} from ${response.source_budget_month}.`);
+      } else if (mode === "copy_previous") {
+        setInfoMessage("No previous month was available, so we started empty.");
+      } else {
+        setInfoMessage(`Started a new blank draft for ${selectedMonth}.`);
+      }
+    } catch (error) {
+      console.error("Failed to initialize month", error);
+      setSaveError(error instanceof Error ? error.message : "Failed to initialize month.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const applyRowUpdate = (row: BudgetDraftRow, updates: Partial<BudgetDraftRow>) => {
+    const nextRow = {
+      ...row,
+      ...updates,
+      category:
+        updates.category_id !== undefined
+          ? categories.find((category) => category.id === updates.category_id)
+          : row.category,
+    };
+
+    updateRow(selectedMonth, row.client_id, {
+      ...updates,
+      category: nextRow.category,
+      needs_review: computeNeedsReview(nextRow),
+    });
+  };
+
+  const handleQuickAdd = () => {
+    const parsedRows = parseQuickAddLines(quickAddInput, activeTab, categories);
+    if (parsedRows.length === 0) return;
+
+    parsedRows.forEach((row) => addRow(selectedMonth, row));
+    setQuickAddInput("");
+    setInfoMessage(`Added ${parsedRows.length} draft row${parsedRows.length > 1 ? "s" : ""} for review.`);
+  };
+
+  const handleAddBlankRow = () => {
+    addRow(selectedMonth, {
+      owner_slot: getDefaultOwnerFromTab(activeTab),
+      include: true,
+      source: "manual",
+      needs_review: true,
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
+      return;
+    }
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+  };
+
+  const handleBulkCategory = (categoryId: string) => {
+    if (!categoryId || selectedIds.length === 0) return;
+    const selectedSet = new Set(selectedIds);
+    rows
+      .filter((row) => selectedSet.has(row.client_id))
+      .forEach((row) => {
+        applyRowUpdate(row, { category_id: categoryId });
+      });
+    setBulkCategoryId("");
+  };
+
+  const handleBulkOwner = (owner: OwnerSlot) => {
+    if (!owner || selectedIds.length === 0) return;
+    const selectedSet = new Set(selectedIds);
+    rows
+      .filter((row) => selectedSet.has(row.client_id))
+      .forEach((row) => {
+        applyRowUpdate(row, { owner_slot: owner });
+      });
+    setBulkOwner("");
+  };
+
+  const handleBulkInclude = (include: boolean) => {
+    const selectedSet = new Set(selectedIds);
+    rows
+      .filter((row) => selectedSet.has(row.client_id))
+      .forEach((row) => {
+        applyRowUpdate(row, { include });
+      });
+  };
+
+  const handleApplyCategoryToSimilarRows = (
+    sourceRow: BudgetDraftRow,
+    categoryId = sourceRow.category_id,
+  ) => {
+    if (!categoryId) return;
+
+    const key = normalizeSimilarityKey(sourceRow.name);
+    if (!key) return;
+
+    const matchingRows = rows.filter((row) => {
+      if (row.client_id === sourceRow.client_id) return false;
+      if (row.category_id) return false;
+      return normalizeSimilarityKey(row.name) === key;
     });
 
-    // Debounce the save to backend
-    const itemToSave = itemToSaveRef.current;
-    if (itemToSave) {
-      console.log(`Setting timeout to save item ${id} in 800ms`, itemToSave);
-      
-      const timeout = setTimeout(() => {
-        console.log(`Timeout fired, calling saveItem for ${id}`, itemToSave);
-        saveItem(itemToSave, ownerSlot, setter);
-        saveTimeouts.current.delete(id);
-      }, 800);
-      
-      saveTimeouts.current.set(id, timeout);
-    } else {
-      console.log('No updated item found for', id);
+    if (matchingRows.length === 0) return;
+
+    matchingRows.forEach((row) => {
+      applyRowUpdate(row, { category_id: categoryId });
+    });
+
+    const categoryName = categories.find((category) => category.id === categoryId)?.name;
+
+    setInfoMessage(
+      `Applied ${categoryName || sourceRow.category?.name || "the selected category"} to ${matchingRows.length} matching row${matchingRows.length === 1 ? "" : "s"}.`,
+    );
+  };
+
+  const handleSave = async () => {
+    setSaveError(null);
+    setInfoMessage(null);
+    setIsSaving(true);
+
+    try {
+      const implicitDeletedIds = rows
+        .filter((row) => !row.include && row.id)
+        .map((row) => row.id as string);
+
+      const response = await saveBudgetDraft({
+        month: selectedMonth,
+        deleted_ids: Array.from(new Set([...draftState.deletedIds, ...implicitDeletedIds])),
+        rows: rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          category_id: row.category_id,
+          amount: row.amount === "" ? 0 : Number(row.amount),
+          owner_slot: row.owner_slot,
+          include: row.include,
+          source: row.source,
+          needs_review: row.needs_review,
+        })),
+      });
+
+      hydrateMonth(selectedMonth, {
+        budgetId: response.budget.id,
+        rows: response.rows.map((row) =>
+          makeDraftRow({
+            id: row.id,
+            name: row.name,
+            category_id: row.category_id,
+            amount: row.amount,
+            owner_slot: row.owner_slot,
+            include: row.include,
+            source: "existing",
+            needs_review: false,
+            category: row.category,
+          }),
+        ),
+        deletedIds: [],
+        initialized: true,
+        hasUnsavedChanges: false,
+      });
+      setSelectedIds([]);
+      setInfoMessage(`Saved ${response.rows.length} budget row${response.rows.length === 1 ? "" : "s"} for ${selectedMonth}.`);
+    } catch (error) {
+      console.error("Failed to save draft", error);
+      setSaveError(error instanceof Error ? error.message : "Failed to save budget.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  // Calculate totals
-  const totalIncome = 
-    user1IncomeItems.reduce((sum, item) => sum + item.amount, 0) +
-    user2IncomeItems.reduce((sum, item) => sum + item.amount, 0);
-  
-  const sharedExpensesTotal = sharedExpenseItems.reduce((sum, item) => sum + item.amount, 0);
-  const personalExpensesTotal = 
-    user1PersonalExpenses.reduce((sum, item) => sum + item.amount, 0) +
-    user2PersonalExpenses.reduce((sum, item) => sum + item.amount, 0);
-  const sharedSavingsTotal = sharedSavingsItems.reduce((sum, item) => sum + item.amount, 0);
-  const sharedFunTotal = sharedFunItems.reduce((sum, item) => sum + item.amount, 0);
-  const remaining = totalIncome - sharedExpensesTotal - personalExpensesTotal - sharedSavingsTotal - sharedFunTotal;
-
-  // Map active tab to category type for the quick-create dialog
-  const tabToCategoryType = (tab: TabType): "income" | "expense" | "savings" | "fun" => {
-    switch (tab) {
-      case "income": return "income";
-      case "shared-expenses": return "expense";
-      case "personal-expenses": return "expense";
-      case "shared-savings": return "savings";
-      case "fun": return "fun";
-    }
-  };
-
-  // Called when a new category is created via the quick dialog
-  const handleCategoryCreated = (newCat: Category) => {
-    setCategories((prev) => [...prev, newCat]);
-    if (newCat.type === "income") setIncomeCategories((prev) => [...prev, newCat]);
-    if (newCat.type === "expense") setExpenseCategories((prev) => [...prev, newCat]);
-    if (newCat.type === "savings") setSavingsCategories((prev) => [...prev, newCat]);
-    if (newCat.type === "fun") setFunCategories((prev) => [...prev, newCat]);
-  };
-
-  // Quick category button rendered in the left column of each tab
   const quickCategorySlot = (
     <QuickCategoryDialog
-      defaultType={tabToCategoryType(activeTab)}
-      onCategoryCreated={handleCategoryCreated}
+      defaultType={activeTab === "income" ? "income" : activeTab === "shared-savings" ? "savings" : activeTab === "fun" ? "fun" : "expense"}
+      onCategoryCreated={(category) => setCategories((prev) => [...prev, category])}
     />
   );
 
-  const tabs = [
-    { id: "income" as TabType, label: "Income" },
-    { id: "shared-expenses" as TabType, label: "Shared Expenses" },
-    { id: "personal-expenses" as TabType, label: "Personal Expenses" },
-    { id: "shared-savings" as TabType, label: "Shared Savings" },
-    { id: "fun" as TabType, label: "Fun" },
-  ];
-
-  // Tabs slot — rendered inside BudgetTabContent's right column header
-  const tabsSlot = (
-    <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => setActiveTab(tab.id)}
-          className={`px-5 py-2 text-sm font-medium rounded-lg transition-all ${
-            activeTab === tab.id
-              ? "bg-white text-gray-900 shadow-sm"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
-  );
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Budget" subtitle="Loading your draft workspace..." />
+        <div className="p-8">
+          <Card className="p-8 text-sm text-gray-500">Loading budget workspace…</Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header 
-        title="Budget" 
-        subtitle="Plan and manage your monthly budget across all categories." 
+      <Header
+        title="Budget"
+        subtitle="Build the month once, then review every entry in one shared draft table."
         breadcrumb={["Dashboard", "Budget"]}
+        action={
+          <div className="flex items-center gap-3">
+            {draftState.hasUnsavedChanges && (
+              <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                Unsaved changes
+              </span>
+            )}
+            <Button onClick={handleSave} disabled={isSaving || !draftState.initialized}>
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? "Saving..." : "Save Budget"}
+            </Button>
+          </div>
+        }
       />
 
-      {/* Main Content */}
-      <div className="p-8">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
-          <StatCard
-            title="TOTAL INCOME"
-            value={`${totalIncome.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="up"
-          />
-          <StatCard
-            title="SHARED EXPENSES"
-            value={`${sharedExpensesTotal.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="down"
-          />
-          <StatCard
-            title="PERSONAL EXPENSES"
-            value={`${personalExpensesTotal.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="down"
-          />
-          <StatCard
-            title="REMAINING"
-            value={`${remaining.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="up"
-          />
-          <StatCard
-            title="SHARED SAVINGS"
-            value={`${sharedSavingsTotal.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="up"
-          />
-          <StatCard
-            title="FUN SPENDING"
-            value={`${sharedFunTotal.toLocaleString()} kr.`}
-            subtitle="Last month"
-            trend="neutral"
-          />
+      <div className="p-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <StatCard title="Total Income" value={formatCurrency(totals.totalIncome)} tone="positive" />
+          <StatCard title="Shared Expenses" value={formatCurrency(totals.sharedExpenses)} tone="negative" />
+          <StatCard title="Personal Expenses" value={formatCurrency(totals.personalExpenses)} tone="negative" />
+          <StatCard title="Shared Savings" value={formatCurrency(totals.sharedSavings)} tone="positive" />
+          <StatCard title="Remaining" value={formatCurrency(totals.remaining)} tone={totals.remaining >= 0 ? "positive" : "negative"} />
         </div>
 
-        {/* Tab Content */}
-        <div>
-            {/* Income Tab */}
-            {activeTab === "income" && (
-              <BudgetTabContent
-                layout="double"
-                leftHeaderSlot={quickCategorySlot}
-                rightHeaderSlot={tabsSlot}
-                columns={[
-                  {
-                    title: user1Name,
-                    items: user1IncomeItems,
-                    ownerSlot: "user1",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setUser1IncomeItems, "user1", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setUser1IncomeItems, id, field, value, "user1"),
-                    onRemoveItem: (id: string) => removeItem(setUser1IncomeItems, id),
-                    categories: incomeCategories,
-                    namePlaceholder: "Name",
-                    addButtonText: "Add Income",
-                  },
-                  {
-                    title: user2Name,
-                    items: user2IncomeItems,
-                    ownerSlot: "user2",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setUser2IncomeItems, "user2", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setUser2IncomeItems, id, field, value, "user2"),
-                    onRemoveItem: (id: string) => removeItem(setUser2IncomeItems, id),
-                    categories: incomeCategories,
-                    namePlaceholder: "Name",
-                    addButtonText: "Add Income",
-                  },
-                ]}
-              />
+        {(saveError || infoMessage) && (
+          <div className="space-y-3">
+            {saveError && (
+              <Card className="p-4 border-red-200 bg-red-50 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                <p className="text-sm text-red-700">{saveError}</p>
+              </Card>
             )}
-
-            {/* Shared Expenses Tab */}
-            {activeTab === "shared-expenses" && (
-              <BudgetTabContent
-                description="Shared expenses split between both users"
-                layout="single"
-                leftHeaderSlot={quickCategorySlot}
-                rightHeaderSlot={tabsSlot}
-                columns={[
-                  {
-                    items: sharedExpenseItems,
-                    ownerSlot: "shared",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setSharedExpenseItems, "shared", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setSharedExpenseItems, id, field, value, "shared"),
-                    onRemoveItem: (id: string) => removeItem(setSharedExpenseItems, id),
-                    categories: expenseCategories,
-                    namePlaceholder: "Expense name",
-                    addButtonText: "Add Shared Expense",
-                  },
-                ]}
-              />
-            )}
-
-            {/* Personal Expenses Tab */}
-            {activeTab === "personal-expenses" && (
-              <BudgetTabContent
-                layout="double"
-                leftHeaderSlot={quickCategorySlot}
-                rightHeaderSlot={tabsSlot}
-                columns={[
-                  {
-                    title: user1Name,
-                    items: user1PersonalExpenses,
-                    ownerSlot: "user1",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setUser1PersonalExpenses, "user1", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setUser1PersonalExpenses, id, field, value, "user1"),
-                    onRemoveItem: (id: string) => removeItem(setUser1PersonalExpenses, id),
-                    categories: expenseCategories,
-                    namePlaceholder: "Expense name",
-                    addButtonText: "Add Expense",
-                  },
-                  {
-                    title: user2Name,
-                    items: user2PersonalExpenses,
-                    ownerSlot: "user2",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setUser2PersonalExpenses, "user2", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setUser2PersonalExpenses, id, field, value, "user2"),
-                    onRemoveItem: (id: string) => removeItem(setUser2PersonalExpenses, id),
-                    categories: expenseCategories,
-                    namePlaceholder: "Expense name",
-                    addButtonText: "Add Expense",
-                  },
-                ]}
-              />
-            )}
-
-            {/* Shared Savings Tab */}
-            {activeTab === "shared-savings" && (
-              <BudgetTabContent
-                description="Savings goals shared between both users"
-                layout="single"
-                leftHeaderSlot={quickCategorySlot}
-                rightHeaderSlot={tabsSlot}
-                columns={[
-                  {
-                    items: sharedSavingsItems,
-                    ownerSlot: "shared",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setSharedSavingsItems, "shared", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setSharedSavingsItems, id, field, value, "shared"),
-                    onRemoveItem: (id: string) => removeItem(setSharedSavingsItems, id),
-                    categories: savingsCategories,
-                    namePlaceholder: "Savings goal name",
-                    addButtonText: "Add Savings Item",
-                  },
-                ]}
-              />
-            )}
-
-            {/* Fun Items Tab */}
-            {activeTab === "fun" && (
-              <BudgetTabContent
-                description="Fun spending shared between both users"
-                layout="single"
-                leftHeaderSlot={quickCategorySlot}
-                rightHeaderSlot={tabsSlot}
-                columns={[
-                  {
-                    items: sharedFunItems,
-                    ownerSlot: "shared",
-                    onAddItem: (values: BudgetLineItemFormValues) =>
-                      addItem(setSharedFunItems, "shared", values),
-                    onUpdateItem: (id: string, field: "name" | "category" | "amount", value: string | number) =>
-                      updateItem(setSharedFunItems, id, field, value, "shared"),
-                    onRemoveItem: (id: string) => removeItem(setSharedFunItems, id),
-                    categories: funCategories,
-                    namePlaceholder: "Fun activity name",
-                    addButtonText: "Add Fun Item",
-                  },
-                ]}
-              />
+            {infoMessage && (
+              <Card className="p-4 border-green-200 bg-green-50 flex items-center gap-3">
+                <Wand2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                <p className="text-sm text-green-700">{infoMessage}</p>
+              </Card>
             )}
           </div>
+        )}
+
+        {!draftState.initialized ? (
+          <Card className="p-8 bg-white border border-dashed border-gray-300">
+            <div className="max-w-2xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Start This Month</p>
+              <h2 className="mt-3 text-2xl font-bold text-gray-900">Choose how {selectedMonth} should begin</h2>
+              <p className="mt-2 text-sm text-gray-500">
+                Start from scratch or copy the most recent previous budget and adjust only what changed.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-4">
+                <Button onClick={() => handleMonthInitialize("empty")} disabled={isSaving}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Start Empty
+                </Button>
+                <Button variant="outline" onClick={() => handleMonthInitialize("copy_previous")} disabled={isSaving}>
+                  <Copy className="w-4 h-4 mr-2" />
+                  Copy Last Month
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <>
+            <Card className="p-5 bg-white">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="inline-flex items-center gap-1 p-1 bg-gray-100 rounded-xl flex-wrap">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        activeTab === tab.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={onlyNeedsReview}
+                      onChange={(e) => setOnlyNeedsReview(e.target.checked)}
+                    />
+                    Needs review
+                  </label>
+                  {quickCategorySlot}
+                  <Button variant="outline" onClick={handleAddBlankRow}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Row
+                  </Button>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-700">Fast add or paste lines</label>
+                  <textarea
+                    value={quickAddInput}
+                    onChange={(e) => setQuickAddInput(e.target.value)}
+                    placeholder={"Rent 12000\nGroceries 3500\nNetflix 129"}
+                    className="w-full min-h-[120px] rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="flex items-center gap-3">
+                    <Button onClick={handleQuickAdd} disabled={!quickAddInput.trim()}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Parsed Rows
+                    </Button>
+                    <p className="text-xs text-gray-500">
+                      Lines can stay incomplete. Anything missing will stay flagged in the review table.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-gray-900">Bulk actions</p>
+                  <div className="mt-3 space-y-3">
+                    <CategoryPickerButton
+                      categories={categories}
+                      value={bulkCategoryId}
+                      onChange={(value) => {
+                        setBulkCategoryId(value);
+                        if (value) handleBulkCategory(value);
+                      }}
+                      recentCategoryIds={recentCategoryIds}
+                      preferredType={getPreferredCategoryFilter(activeTab)}
+                      placeholder="Set category for selected rows"
+                      title="Apply category to selected rows"
+                      description="Search once, then apply the category to every selected row."
+                      allowClear={false}
+                      disabled={selectedIds.length === 0}
+                    />
+
+                    <OwnerSegmentedControl
+                      value={bulkOwner}
+                      onChange={(owner) => {
+                        setBulkOwner(owner);
+                        if (owner) handleBulkOwner(owner);
+                      }}
+                      user1Name={user1Name}
+                      user2Name={user2Name}
+                      disabled={selectedIds.length === 0}
+                    />
+
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => handleBulkInclude(true)} disabled={selectedIds.length === 0}>
+                        Include
+                      </Button>
+                      <Button variant="outline" className="flex-1" onClick={() => handleBulkInclude(false)} disabled={selectedIds.length === 0}>
+                        Exclude
+                      </Button>
+                    </div>
+
+                    <p className="text-xs text-gray-500">
+                      {selectedIds.length === 0 ? "Select rows to apply bulk actions." : `${selectedIds.length} row${selectedIds.length === 1 ? "" : "s"} selected.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="overflow-hidden bg-white">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 text-left w-10">
+                        <input type="checkbox" checked={allFilteredSelected} onChange={handleToggleSelectAll} />
+                      </th>
+                      <th className="px-4 py-3 text-left">Use</th>
+                      <th className="px-4 py-3 text-left">Source</th>
+                      <th className="px-4 py-3 text-left">Name</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                      <th className="px-4 py-3 text-left">Category</th>
+                      <th className="px-4 py-3 text-left">Owner</th>
+                      <th className="px-4 py-3 text-left">Status</th>
+                      <th className="px-4 py-3 text-right">Remove</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredRows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">
+                          No rows match this view yet.
+                        </td>
+                      </tr>
+                    )}
+
+                    {filteredRows.map((row) => (
+                      <tr key={row.client_id} className={!row.include ? "bg-gray-50 opacity-60" : "bg-white"}>
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(row.client_id)}
+                            onChange={(e) =>
+                              setSelectedIds((prev) =>
+                                e.target.checked ? [...prev, row.client_id] : prev.filter((id) => id !== row.client_id),
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={row.include}
+                            onChange={(e) => applyRowUpdate(row, { include: e.target.checked })}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                            {sourceLabel(row.source)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            value={row.name}
+                            onChange={(e) => applyRowUpdate(row, { name: e.target.value })}
+                            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Item name"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input
+                            value={row.amount}
+                            onChange={(e) => applyRowUpdate(row, { amount: normalizeAmount(e.target.value) })}
+                            className="w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="px-4 py-3 min-w-[220px]">
+                          {(() => {
+                            const similarMatchCount = getSimilarMatchCount(row);
+
+                            return (
+                              <>
+                          <CategoryPickerButton
+                            categories={categories}
+                            value={row.category_id}
+                            onChange={(value) => applyRowUpdate(row, { category_id: value })}
+                            recentCategoryIds={recentCategoryIds}
+                            preferredType={getPreferredCategoryFilter(activeTab)}
+                            placeholder="Select category"
+                            title={row.name.trim() ? `Category for ${row.name}` : "Choose a category"}
+                            description="Search, use a recent category, or browse the grouped list."
+                          />
+                          {row.category_id && similarMatchCount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyCategoryToSimilarRows(row)}
+                              className="mt-2 inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                            >
+                              Apply to {similarMatchCount} matching row
+                              {similarMatchCount === 1 ? "" : "s"}
+                            </button>
+                          )}
+                              </>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <OwnerSegmentedControl
+                            value={row.owner_slot}
+                            onChange={(value) => applyRowUpdate(row, { owner_slot: value })}
+                            user1Name={user1Name}
+                            user2Name={user2Name}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.needs_review ? (
+                            <span className="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 border border-amber-200">
+                              Needs review
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200">
+                              Ready
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => removeRow(selectedMonth, row.client_id)}
+                            className="inline-flex items-center justify-center rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label="Remove row"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </>
+        )}
       </div>
     </div>
   );

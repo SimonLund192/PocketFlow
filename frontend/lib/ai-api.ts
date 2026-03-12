@@ -1,3 +1,5 @@
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface ChatMessage {
@@ -21,8 +23,10 @@ export interface ProposedEntry {
   category_id: string;
   category_type: string;
   amount: number;
-  owner_slot: string;
+  owner_slot: "user1" | "user2" | "shared";
   month: string;
+  source?: "ai";
+  needs_review?: boolean;
 }
 
 export interface PendingAction {
@@ -38,41 +42,17 @@ export interface ChatResponse {
   pending_action?: PendingAction | null;
 }
 
-function getAuthHeaders(): HeadersInit {
-  let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
-  if (token) {
-    token = token.trim();
-    if (token === '') {
-      token = null;
-    }
-  }
-
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  return headers;
-}
-
 /**
  * Send a chat message to the AI assistant
  */
 export async function sendChatMessage(request: ChatRequest): Promise<ChatResponse> {
   const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: buildAuthHeaders(),
     body: JSON.stringify(request),
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to send chat message' }));
-    throw new Error(error.detail || 'Failed to send chat message');
-  }
+  await throwIfUnauthorized(response, 'Failed to send chat message');
 
   return response.json();
 }
@@ -81,18 +61,13 @@ export async function sendChatMessage(request: ChatRequest): Promise<ChatRespons
  * Confirm a pending action (save proposed budget entries)
  */
 export async function confirmBudgetEntries(entries: ProposedEntry[]): Promise<ChatResponse> {
-  const headers = getAuthHeaders();
-
   const response = await fetch(`${API_BASE_URL}/api/ai/confirm`, {
     method: 'POST',
-    headers,
+    headers: buildAuthHeaders(),
     body: JSON.stringify(entries),
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to confirm entries' }));
-    throw new Error(error.detail || 'Failed to confirm entries');
-  }
+  await throwIfUnauthorized(response, 'Failed to confirm entries');
 
   return response.json();
 }
@@ -101,30 +76,16 @@ export async function confirmBudgetEntries(entries: ProposedEntry[]): Promise<Ch
  * Upload a CSV bank statement file for AI processing
  */
 export async function uploadCSV(file: File): Promise<ChatResponse> {
-  let token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  if (token) {
-    token = token.trim();
-    if (token === '') token = null;
-  }
-
   const formData = new FormData();
   formData.append('file', file);
 
-  const headers: HeadersInit = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
   const response = await fetch(`${API_BASE_URL}/api/ai/upload-csv`, {
     method: 'POST',
-    headers,
+    headers: buildAuthHeaders(false),
     body: formData,
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to upload CSV' }));
-    throw new Error(error.detail || 'Failed to upload CSV');
-  }
+  await throwIfUnauthorized(response, 'Failed to upload CSV');
 
   return response.json();
 }
@@ -147,13 +108,10 @@ export interface DemoSeedResponse {
 export async function seedDemoData(): Promise<DemoSeedResponse> {
   const response = await fetch(`${API_BASE_URL}/api/demo/seed`, {
     method: 'POST',
-    headers: getAuthHeaders(),
+    headers: buildAuthHeaders(),
   });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Failed to seed demo data' }));
-    throw new Error(error.detail || 'Failed to seed demo data');
-  }
+  await throwIfUnauthorized(response, 'Failed to seed demo data');
 
   return response.json();
 }

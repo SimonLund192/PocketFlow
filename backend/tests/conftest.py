@@ -1,9 +1,19 @@
+import asyncio
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from datetime import datetime, timezone
 from app.main import app
 from app.database import database, categories_collection, budgets_collection, budget_line_items_collection
+from app.dependencies import get_current_user_id
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Use one event loop for the full test session so Motor does not bind to closed loops."""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest_asyncio.fixture
@@ -38,13 +48,26 @@ def test_user_id():
     return "test_user_123"
 
 
+@pytest.fixture(autouse=True)
+def auth_override(test_user_id):
+    """Override auth for API tests while allowing per-test user switching."""
+    state = {"user_id": test_user_id}
+
+    async def _override_get_current_user_id():
+        return state["user_id"]
+
+    app.dependency_overrides[get_current_user_id] = _override_get_current_user_id
+    yield state
+    app.dependency_overrides.pop(get_current_user_id, None)
+
+
 @pytest_asyncio.fixture
 async def sample_category(db_session, test_user_id):
     """Create a sample active category for testing"""
     category_doc = {
         "user_id": test_user_id,
         "name": "Housing",
-        "type": "personal-expenses",
+        "type": "expense",
         "icon": "home",
         "color": "#FF5733",
         "is_active": True,
@@ -62,7 +85,7 @@ async def sample_inactive_category(db_session, test_user_id):
     category_doc = {
         "user_id": test_user_id,
         "name": "Deprecated",
-        "type": "personal-expenses",
+        "type": "expense",
         "icon": "archive",
         "color": "#888888",
         "is_active": False,

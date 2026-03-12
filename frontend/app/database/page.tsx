@@ -6,12 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import Tabs from "@/components/Tabs";
+import { buildAuthHeaders, throwIfUnauthorized } from "@/lib/session";
 
 interface Document {
   [key: string]: any;
 }
 
 export default function Database() {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const [activeCollection, setActiveCollection] = useState("transactions");
   const [collections, setCollections] = useState<string[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -19,25 +21,18 @@ export default function Database() {
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem("token");
-    return {
-      "Content-Type": "application/json",
-      ...(token && { Authorization: `Bearer ${token}` }),
-    };
-  };
-
   const fetchCollections = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/database/collections", {
-        headers: getAuthHeaders(),
+      const response = await fetch(`${API_BASE_URL}/api/database/collections`, {
+        headers: buildAuthHeaders(),
       });
-      if (response.ok) {
-        const data = await response.json();
-        setCollections(data);
-        if (data.length > 0 && !activeCollection) {
-          setActiveCollection(data[0]);
-        }
+
+      await throwIfUnauthorized(response, "Failed to fetch collections");
+
+      const data = await response.json();
+      setCollections(data);
+      if (data.length > 0 && !activeCollection) {
+        setActiveCollection(data[0]);
       }
     } catch (error) {
       console.error("Error fetching collections:", error);
@@ -49,26 +44,21 @@ export default function Database() {
     setError(null);
     try {
       const [dataResponse, countResponse] = await Promise.all([
-        fetch(`http://localhost:8000/api/database/${activeCollection}`, {
-          headers: getAuthHeaders(),
+        fetch(`${API_BASE_URL}/api/database/${activeCollection}`, {
+          headers: buildAuthHeaders(),
         }),
-        fetch(`http://localhost:8000/api/database/${activeCollection}/count`, {
-          headers: getAuthHeaders(),
+        fetch(`${API_BASE_URL}/api/database/${activeCollection}/count`, {
+          headers: buildAuthHeaders(),
         }),
       ]);
 
-      if (dataResponse.ok) {
-        const data = await dataResponse.json();
-        setDocuments(data);
-      } else {
-        const errorData = await dataResponse.json();
-        setError(errorData.detail || "Failed to fetch data");
-      }
+      await throwIfUnauthorized(dataResponse, "Failed to fetch data");
+      await throwIfUnauthorized(countResponse, "Failed to fetch collection count");
 
-      if (countResponse.ok) {
-        const countData = await countResponse.json();
-        setCount(countData.count);
-      }
+      const data = await dataResponse.json();
+      const countData = await countResponse.json();
+      setDocuments(data);
+      setCount(countData.count);
     } catch (error) {
       console.error("Error fetching data:", error);
       setError(error instanceof Error ? error.message : "Failed to fetch data");
