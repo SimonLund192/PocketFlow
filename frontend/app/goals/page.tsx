@@ -218,7 +218,7 @@ function GoalFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-hidden border-0 p-0 shadow-2xl sm:max-w-3xl">
         <form onSubmit={onSubmit} className="flex max-h-[90vh] flex-col bg-white">
-          <DialogHeader className="border-b border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 px-6 py-6 text-left">
+          <DialogHeader className="border-b border-slate-200 bg-slate-50 px-6 py-6 text-left">
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="mb-3 inline-flex items-center rounded-full bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
@@ -359,7 +359,7 @@ function SortableGoalItem({
         className={cn(
           "group cursor-pointer rounded-[28px] border p-4 transition-all duration-200",
           isSelected
-            ? "border-slate-900 bg-slate-950 text-white shadow-xl"
+            ? "border-indigo-700 bg-indigo-600 text-white shadow-xl"
             : "border-slate-200 bg-white shadow-sm hover:-translate-y-0.5 hover:shadow-lg",
         )}
         onClick={() => onSelect(goal.id)}
@@ -394,7 +394,7 @@ function SortableGoalItem({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold",
-                        isSelected ? "bg-emerald-400/20 text-emerald-100" : "bg-emerald-50 text-emerald-700",
+                        isSelected ? "bg-white/15 text-white" : "bg-emerald-50 text-emerald-700",
                       )}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -442,12 +442,12 @@ function SortableGoalItem({
               <div className="space-y-3">
                 <div className="flex items-end justify-between gap-4">
                   <div>
-                    <p className={cn("text-xs uppercase tracking-[0.18em]", isSelected ? "text-white/55" : "text-slate-400")}>
+                    <p className={cn("text-xs uppercase tracking-[0.18em]", isSelected ? "text-white/70" : "text-slate-400")}>
                       Saved so far
                     </p>
                     <p className="mt-1 text-lg font-semibold">
                       {formatCurrency(goal.saved)}
-                      <span className={cn("ml-2 text-sm font-medium", isSelected ? "text-white/65" : "text-slate-500")}>
+                      <span className={cn("ml-2 text-sm font-medium", isSelected ? "text-white/80" : "text-slate-500")}>
                         of {formatCurrency(goal.target)}
                       </span>
                     </p>
@@ -455,9 +455,9 @@ function SortableGoalItem({
                   <p className="text-2xl font-semibold">{Math.round(getProgress(goal))}%</p>
                 </div>
 
-                <div className={cn("h-2 overflow-hidden rounded-full", isSelected ? "bg-white/10" : "bg-slate-100")}>
+                <div className={cn("h-2 overflow-hidden rounded-full", isSelected ? "bg-white/20" : "bg-slate-100")}>
                   <div
-                    className={cn("h-full rounded-full transition-all", isSelected ? "bg-amber-300" : "bg-slate-900")}
+                    className={cn("h-full rounded-full transition-all", isSelected ? "bg-white" : "bg-indigo-600")}
                     style={{ width: `${getProgress(goal)}%` }}
                   />
                 </div>
@@ -466,14 +466,14 @@ function SortableGoalItem({
               <div
                 className={cn(
                   "rounded-3xl border px-4 py-3",
-                  isSelected ? "border-white/10 bg-white/5" : "border-slate-200 bg-slate-50",
+                  isSelected ? "border-white/20 bg-white/10" : "border-slate-200 bg-slate-50",
                 )}
               >
-                <p className={cn("text-xs uppercase tracking-[0.18em]", isSelected ? "text-white/55" : "text-slate-400")}>
+                <p className={cn("text-xs uppercase tracking-[0.18em]", isSelected ? "text-white/70" : "text-slate-400")}>
                   Remaining
                 </p>
                 <p className="mt-2 text-lg font-semibold">{formatCurrency(getRemaining(goal))}</p>
-                <p className={cn("mt-2 text-sm", isSelected ? "text-white/65" : "text-slate-500")}>
+                <p className={cn("mt-2 text-sm", isSelected ? "text-white/80" : "text-slate-500")}>
                   {goal.items?.length ? `${goal.items.length} planned steps` : "Simple total target"}
                 </p>
               </div>
@@ -796,7 +796,7 @@ export default function Goals() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(254,243,199,0.45),_transparent_32%),linear-gradient(180deg,_#f8fafc_0%,_#f8fafc_100%)]">
+    <div className="min-h-screen bg-gray-50">
       <Header
         title="Goals"
         subtitle="Plan the next thing your savings should unlock."
@@ -810,10 +810,10 @@ export default function Goals() {
           onTabChange={setActiveTab}
         />
 
-        <Card className="rounded-[32px] border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 p-6 shadow-sm">
+        <Card className="rounded-[32px] border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600 shadow-sm">
+              <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-700 shadow-sm">
                 <Sparkles className="h-4 w-4" />
                 {goalTypeLabel(currentGoalType)} goal lane
               </div>
@@ -828,7 +828,7 @@ export default function Goals() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Button
                 variant="outline"
-                className="rounded-2xl border-white bg-white/90"
+                className="rounded-2xl border-slate-200 bg-white"
                 onClick={() => setIsAddModalOpen(true)}
               >
                 <Plus className="h-4 w-4" />
@@ -927,10 +927,10 @@ export default function Goals() {
 
           {selectedGoal ? (
             <Card className="rounded-[32px] border-slate-200 bg-white/95 p-6 shadow-sm">
-              <div className="rounded-[28px] bg-slate-950 p-6 text-white">
+              <div className="rounded-[28px] bg-indigo-600 p-6 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
                       Priority {selectedGoal.priority}
                     </div>
                     <h2 className="mt-4 text-3xl font-semibold">{selectedGoal.name}</h2>
@@ -941,7 +941,7 @@ export default function Goals() {
 
                   <Button
                     variant="outline"
-                    className="rounded-2xl border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    className="rounded-2xl border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
                     onClick={(event) => openEditModal(selectedGoal, event)}
                   >
                     <Pencil className="h-4 w-4" />
@@ -950,20 +950,20 @@ export default function Goals() {
                 </div>
 
                 <div className="mt-8 grid gap-4 md:grid-cols-3">
-                  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+                  <div className="rounded-3xl border border-white/20 bg-white/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
                       Saved
                     </p>
                     <p className="mt-2 text-2xl font-semibold">{formatCurrency(selectedGoal.saved)}</p>
                   </div>
-                  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+                  <div className="rounded-3xl border border-white/20 bg-white/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
                       Target
                     </p>
                     <p className="mt-2 text-2xl font-semibold">{formatCurrency(selectedGoal.target)}</p>
                   </div>
-                  <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/55">
+                  <div className="rounded-3xl border border-white/20 bg-white/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
                       Remaining
                     </p>
                     <p className="mt-2 text-2xl font-semibold">{formatCurrency(getRemaining(selectedGoal))}</p>
@@ -975,9 +975,9 @@ export default function Goals() {
                     <span>{Math.round(getProgress(selectedGoal))}% funded</span>
                     <span>{selectedGoal.completed ? "Ready to move to the next goal" : "Still receiving savings"}</span>
                   </div>
-                  <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-3 overflow-hidden rounded-full bg-white/20">
                     <div
-                      className="h-full rounded-full bg-amber-300 transition-all"
+                      className="h-full rounded-full bg-white transition-all"
                       style={{ width: `${getProgress(selectedGoal)}%` }}
                     />
                   </div>

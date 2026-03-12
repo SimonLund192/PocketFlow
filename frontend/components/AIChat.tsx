@@ -9,7 +9,7 @@ interface AIChatProps {
 }
 
 export default function AIChat({ initialMessage }: AIChatProps) {
-  const defaultMessage = initialMessage || "Hi! I'm your PocketFlow AI assistant. I can help you with your budget, transactions, and financial insights. You can also upload a CSV bank statement and I'll categorize everything for you. What would you like to do?";
+  const defaultMessage = initialMessage || "Hi! I'm your PocketFlow AI assistant. I can help you add budget rows, create goals, review spending, and answer questions about your finances. You can also upload a CSV bank statement and I'll sort it into your budget draft. What would you like to do?";
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
