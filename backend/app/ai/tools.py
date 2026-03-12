@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Optional
 from functools import wraps
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -7,6 +7,8 @@ from .schemas import CreateTransactionArgs, ListTransactionsArgs, DeleteTransact
 import json
 import csv
 import io
+import re
+import uuid
 
 # Registry to store available tools
 tools_registry: Dict[str, Callable] = {}
@@ -126,6 +128,134 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
         }
     })
 
+    definitions.append({
+        "type": "function",
+        "function": {
+            "name": "create_goal",
+            "description": "Create a new savings goal for the user. Use this when the user explicitly asks to add or create a goal. If items are provided, target_amount can be omitted because it will be calculated from the item amounts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Goal name, e.g. 'Italy trip' or 'New sofa'"
+                    },
+                    "goal_type": {
+                        "type": "string",
+                        "description": "Goal type: shared for shared savings goals, fun for personal/fun goals. Defaults to shared.",
+                        "enum": ["shared", "fun"]
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional note describing why the goal matters"
+                    },
+                    "target_amount": {
+                        "type": "number",
+                        "description": "Optional total target in DKK. Required if items are not provided."
+                    },
+                    "items": {
+                        "type": "array",
+                        "description": "Optional itemized steps that make up the goal total.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Item or step name"
+                                },
+                                "amount": {
+                                    "type": "number",
+                                    "description": "Item amount in DKK"
+                                },
+                                "url": {
+                                    "type": "string",
+                                    "description": "Optional link for the item"
+                                }
+                            },
+                            "required": ["name", "amount"]
+                        }
+                    }
+                },
+                "required": ["name"]
+            }
+        }
+    })
+
+    definitions.append({
+        "type": "function",
+        "function": {
+            "name": "update_goal",
+            "description": "Update an existing goal by name. Use this when the user explicitly asks to rename a goal, change its target, switch between shared/fun, edit the description, or replace its itemized steps. Call get_goals_summary first if you need to inspect the current goals.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal_name": {
+                        "type": "string",
+                        "description": "Exact goal name to update"
+                    },
+                    "new_name": {
+                        "type": "string",
+                        "description": "Optional replacement goal name"
+                    },
+                    "goal_type": {
+                        "type": "string",
+                        "description": "Optional new goal type",
+                        "enum": ["shared", "fun"]
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Optional new description. Use an empty string to clear it."
+                    },
+                    "target_amount": {
+                        "type": "number",
+                        "description": "Optional new target amount in DKK. If items are provided, the total will be recalculated from those items."
+                    },
+                    "items": {
+                        "type": "array",
+                        "description": "Optional replacement list of goal items/steps.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string",
+                                    "description": "Item or step name"
+                                },
+                                "amount": {
+                                    "type": "number",
+                                    "description": "Item amount in DKK"
+                                },
+                                "url": {
+                                    "type": "string",
+                                    "description": "Optional link for the item"
+                                }
+                            },
+                            "required": ["name", "amount"]
+                        }
+                    }
+                },
+                "required": ["goal_name"]
+            }
+        }
+    })
+
+    definitions.append({
+        "type": "function",
+        "function": {
+            "name": "delete_goal",
+            "description": "Delete an existing goal by name. Use this only when the user explicitly asks to remove or delete a goal. Call get_goals_summary first if you need to verify the name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal_name": {
+                        "type": "string",
+                        "description": "Exact goal name to delete"
+                    }
+                },
+                "required": ["goal_name"]
+            }
+        }
+    })
+
     # --- Write / Action Tools ---
 
     definitions.append({
@@ -221,6 +351,65 @@ def get_tool_definitions() -> List[Dict[str, Any]]:
 
 # --- Tool Implementations ---
 # --- Tool Implementations ---
+
+def _normalize_goal_type(value: Optional[str]) -> str:
+    if value == "fun":
+        return "fun"
+    return "shared"
+
+
+def _sanitize_goal_items(items: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    sanitized: List[Dict[str, Any]] = []
+    for raw in items or []:
+        name = str(raw.get("name", "")).strip()
+        amount = float(raw.get("amount", 0) or 0)
+        url = str(raw.get("url", "") or "").strip()
+
+        if not name or amount <= 0:
+            continue
+
+        item: Dict[str, Any] = {
+            "name": name,
+            "amount": amount,
+        }
+        if url:
+            item["url"] = url
+        sanitized.append(item)
+
+    return sanitized
+
+
+def _resolve_goal_target(target_amount: Optional[float], items: List[Dict[str, Any]]) -> float:
+    if items:
+        return round(sum(float(item["amount"]) for item in items), 2)
+
+    target = float(target_amount or 0)
+    if target <= 0:
+        raise ValueError("A goal needs either itemized steps or a positive target_amount.")
+    return round(target, 2)
+
+
+async def _find_goal_for_user(user_id: str, goal_name: str) -> Optional[Dict[str, Any]]:
+    normalized_name = goal_name.strip()
+    if not normalized_name:
+        return None
+    escaped_name = re.escape(normalized_name)
+
+    exact_match = await goals_collection.find_one({
+        "user_id": user_id,
+        "name": {"$regex": f"^{escaped_name}$", "$options": "i"},
+    })
+    if exact_match:
+        return exact_match
+
+    starts_with_matches = await goals_collection.find({
+        "user_id": user_id,
+        "name": {"$regex": f"^{escaped_name}", "$options": "i"},
+    }).to_list(length=2)
+    if len(starts_with_matches) == 1:
+        return starts_with_matches[0]
+
+    return None
 
 @register_tool("get_budget_summary")
 async def get_budget_summary(user_id: str, **kwargs) -> Dict[str, Any]:
@@ -626,6 +815,7 @@ async def get_goals_summary(user_id: str, **kwargs) -> Dict[str, Any]:
                 saved = min(remaining, target)
                 remaining = max(0, remaining - saved)
                 result.append({
+                    "id": str(g.get("_id", "")),
                     "name": g.get("name", "Unnamed"),
                     "target": target,
                     "saved": round(saved, 2),
@@ -666,8 +856,164 @@ async def get_goals_summary(user_id: str, **kwargs) -> Dict[str, Any]:
 
 
 # =============================================================================
-# WRITE TOOLS — These allow the AI to create budget entries
+# WRITE TOOLS — These allow the AI to create and edit goals / budget entries
 # =============================================================================
+
+@register_tool("create_goal")
+async def create_goal(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Create a goal for the user."""
+    try:
+        name = str(kwargs.get("name", "")).strip()
+        if not name:
+            return {"ok": False, "error": "Goal name is required", "code": "CREATE_GOAL_NAME_REQUIRED"}
+
+        goal_type = _normalize_goal_type(kwargs.get("goal_type"))
+        description = kwargs.get("description")
+        items = _sanitize_goal_items(kwargs.get("items"))
+        target_amount = _resolve_goal_target(kwargs.get("target_amount"), items)
+
+        match_query: Dict[str, Any] = {"user_id": user_id, "$or": [{"type": goal_type}]}
+        if goal_type == "shared":
+            match_query["$or"].append({"type": {"$exists": False}})
+
+        highest_priority_goal = await goals_collection.find_one(
+            match_query,
+            sort=[("priority", -1)],
+        )
+        new_priority = (highest_priority_goal["priority"] + 1) if highest_priority_goal and "priority" in highest_priority_goal else 1
+
+        now = datetime.now(timezone.utc)
+        new_goal = {
+            "_id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "name": name,
+            "target_amount": target_amount,
+            "current_amount": 0.0,
+            "description": description.strip() if isinstance(description, str) else description,
+            "type": goal_type,
+            "items": items,
+            "achieved": False,
+            "priority": new_priority,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        await goals_collection.insert_one(new_goal)
+
+        return {
+            "ok": True,
+            "data": {
+                "goal": {
+                    "id": new_goal["_id"],
+                    "name": new_goal["name"],
+                    "target_amount": new_goal["target_amount"],
+                    "description": new_goal["description"] or "",
+                    "type": new_goal["type"],
+                    "priority": new_goal["priority"],
+                    "items": new_goal["items"],
+                }
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "CREATE_GOAL_ERROR"}
+
+
+@register_tool("update_goal")
+async def update_goal(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Update a goal for the user."""
+    try:
+        goal_name = str(kwargs.get("goal_name", "")).strip()
+        goal = await _find_goal_for_user(user_id, goal_name)
+        if not goal:
+            return {
+                "ok": False,
+                "error": f"Could not find a unique goal named '{goal_name}'. Ask the user to clarify the exact goal name.",
+                "code": "UPDATE_GOAL_NOT_FOUND",
+            }
+
+        items_arg = kwargs.get("items")
+        items = _sanitize_goal_items(items_arg) if items_arg is not None else None
+        update_fields: Dict[str, Any] = {
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        new_name = kwargs.get("new_name")
+        if isinstance(new_name, str) and new_name.strip():
+            update_fields["name"] = new_name.strip()
+
+        if "goal_type" in kwargs:
+            update_fields["type"] = _normalize_goal_type(kwargs.get("goal_type"))
+
+        if "description" in kwargs:
+            description = kwargs.get("description")
+            update_fields["description"] = description.strip() if isinstance(description, str) else description
+
+        if items is not None:
+            update_fields["items"] = items
+            update_fields["target_amount"] = _resolve_goal_target(kwargs.get("target_amount"), items)
+        elif "target_amount" in kwargs:
+            target_amount = float(kwargs.get("target_amount") or 0)
+            if target_amount <= 0:
+                return {"ok": False, "error": "target_amount must be positive", "code": "UPDATE_GOAL_INVALID_TARGET"}
+            update_fields["target_amount"] = round(target_amount, 2)
+
+        if len(update_fields) == 1:
+            return {"ok": False, "error": "No changes were provided", "code": "UPDATE_GOAL_NO_CHANGES"}
+
+        updated_goal = await goals_collection.find_one_and_update(
+            {"_id": goal["_id"], "user_id": user_id},
+            {"$set": update_fields},
+            return_document=True,
+        )
+        if not updated_goal:
+            return {"ok": False, "error": "Goal not found", "code": "UPDATE_GOAL_NOT_FOUND"}
+
+        return {
+            "ok": True,
+            "data": {
+                "goal": {
+                    "id": updated_goal["_id"],
+                    "name": updated_goal.get("name", ""),
+                    "target_amount": round(float(updated_goal.get("target_amount", 0)), 2),
+                    "description": updated_goal.get("description", "") or "",
+                    "type": updated_goal.get("type", "shared"),
+                    "priority": updated_goal.get("priority", 0),
+                    "items": updated_goal.get("items", []),
+                }
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "UPDATE_GOAL_ERROR"}
+
+
+@register_tool("delete_goal")
+async def delete_goal(user_id: str, **kwargs) -> Dict[str, Any]:
+    """Delete a goal for the user."""
+    try:
+        goal_name = str(kwargs.get("goal_name", "")).strip()
+        goal = await _find_goal_for_user(user_id, goal_name)
+        if not goal:
+            return {
+                "ok": False,
+                "error": f"Could not find a unique goal named '{goal_name}'. Ask the user to clarify the exact goal name.",
+                "code": "DELETE_GOAL_NOT_FOUND",
+            }
+
+        result = await goals_collection.delete_one({"_id": goal["_id"], "user_id": user_id})
+        if result.deleted_count == 0:
+            return {"ok": False, "error": "Goal not found", "code": "DELETE_GOAL_NOT_FOUND"}
+
+        return {
+            "ok": True,
+            "data": {
+                "deleted_goal": {
+                    "id": str(goal["_id"]),
+                    "name": goal.get("name", ""),
+                }
+            }
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "code": "DELETE_GOAL_ERROR"}
 
 @register_tool("get_user_categories")
 async def get_user_categories(user_id: str, **kwargs) -> Dict[str, Any]:

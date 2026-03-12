@@ -134,10 +134,10 @@ export default function GoalItemsInput({ items, onChange }: GoalItemsInputProps)
 
   return (
     <div className="space-y-5">
-      <div className="rounded-3xl border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-amber-50 p-5">
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm font-semibold text-sky-900">
+            <div className="flex items-center gap-2 text-sm font-semibold text-indigo-700">
               <Sparkles className="h-4 w-4" />
               Quick add steps
             </div>
@@ -281,14 +281,14 @@ export default function GoalItemsInput({ items, onChange }: GoalItemsInputProps)
           </div>
         )}
 
-        <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-slate-950 px-5 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-3xl border border-indigo-700 bg-indigo-600 px-5 py-4 text-white sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
               Step total
             </p>
             <p className="mt-1 text-2xl font-semibold">{formatCurrency(totalAmount)}</p>
           </div>
-          <div className="text-sm text-slate-300">
+          <div className="text-sm text-white/80">
             {reviewCount > 0
               ? `${reviewCount} ${reviewCount === 1 ? "step needs" : "steps need"} review`
               : "Everything looks ready to save"}
